@@ -1,0 +1,14 @@
+<?xml version="1.0" ?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd">
+    <event name="sales_order_shipment_save_after">
+        <observer name="zaver_sales_order_shipment_save_after"
+                  instance="Zaver\Payment\Observer\SalesOrderShipmentSaveAfter"/>
+    </event>
+    <event name="order_cancel_after">
+        <observer name="zaver_order_cancel_after" instance="Zaver\Payment\Observer\OrderCancelAfter"/>
+    </event>
+    <event name="sales_order_creditmemo_save_after">
+        <observer name="zaver_sales_order_creditmemo_save_after" instance="Zaver\Payment\Observer\SalesOrderCreditmemoSaveAfter"/>
+    </event>
+</config>

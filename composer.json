@@ -1,0 +1,31 @@
+{
+  "name": "zaver/payment",
+  "description": "Zaver Payment Module for Magento 2",
+  "type": "magento2-module",
+  "version": "1.0.0",
+  "license": "proprietary",
+  "repositories": [
+    {
+      "type": "composer",
+      "url": "https://repo.magento.com/"
+    }
+  ],
+  "authors": [
+    {
+      "homepage": "https://www.zaver.io",
+      "name": "Zaver"
+    }
+  ],
+  "require": {
+    "php": ">=7.4.0",
+    "zaver/sdk": "dev-main"
+  },
+  "autoload": {
+    "psr-4": {
+      "Zaver\\Payment\\": ""
+    },
+    "files": [
+      "registration.php"
+    ]
+  }
+}

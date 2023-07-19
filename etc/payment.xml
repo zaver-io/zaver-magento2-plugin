@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<payment xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_include.xsd">
+    <groups>
+        <group id="zaver">
+            <label>Zaver</label>
+        </group>
+    </groups>
+    <methods>
+        <method name="zaver_paylater">
+            <allow_multiple_address>1</allow_multiple_address>
+        </method>
+        <method name="zaver_installments">
+            <allow_multiple_address>1</allow_multiple_address>
+        </method>
+    </methods>
+</payment>

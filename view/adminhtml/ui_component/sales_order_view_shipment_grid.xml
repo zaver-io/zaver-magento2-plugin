@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<listing xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Ui:etc/ui_configuration.xsd">
+    <columns name="sales_order_shipment_columns">
+        <column name="amount" class="Zaver\Payment\Ui\Component\Listing\Column\ShipGridColumn" >
+            <settings>
+                <filter>textRange</filter>
+                <label translate="true">Amount</label>
+            </settings>
+        </column>
+        <column name="capture" class="Zaver\Payment\Ui\Component\Listing\Column\ShipGridColumn" >
+            <settings>
+                <filter>textRange</filter>
+                <label translate="true">Capture in Zaver</label>
+            </settings>
+        </column>
+    </columns>
+</listing>
