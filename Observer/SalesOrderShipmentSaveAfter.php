@@ -33,14 +33,35 @@ class SalesOrderShipmentSaveAfter implements ObserverInterface
    */
   private $_shipments;
 
+  /**
+   * @var \Magento\Sales\Model\Service\InvoiceService
+   */
+  protected $_invoiceService;
+
+  /**
+   * @var \Magento\Framework\DB\Transaction
+   */
+  protected $_dbTransaction;
+
+  /**
+   * @var \Magento\Sales\Model\Order\Payment\Transaction\Builder
+   */
+  protected $_tranBuilder;
+
   public function __construct(\Psr\Log\LoggerInterface $logger,
                               \Magento\Framework\Message\ManagerInterface $messageManager,
                               \Zaver\Payment\Helper\Data $data,
-                              \Zaver\Payment\Model\Shipments $shipments) {
+                              \Zaver\Payment\Model\Shipments $shipments,
+                              \Magento\Sales\Model\Service\InvoiceService $invoiceService,
+                              \Magento\Framework\DB\Transaction $transaction,
+                              \Magento\Sales\Model\Order\Payment\Transaction\Builder $tranBuilder) {
     $this->_logger = $logger;
     $this->messageManager = $messageManager;
     $this->_helper = $data;
     $this->_shipments = $shipments;
+    $this->_invoiceService = $invoiceService;
+    $this->_dbTransaction = $transaction;
+    $this->_tranBuilder = $tranBuilder;
   }
 
   /**
@@ -49,6 +70,7 @@ class SalesOrderShipmentSaveAfter implements ObserverInterface
    * @param \Magento\Framework\Event\Observer $observer
    */
   public function execute(\Magento\Framework\Event\Observer $observer) {
+    $helper = $this->_helper;
     $event = $observer->getEvent();
     $method = $event->getMethodInstance();
     $result = $event->getResult();
@@ -66,12 +88,10 @@ class SalesOrderShipmentSaveAfter implements ObserverInterface
       $isInstallmentsEnabled = $this->_helper->getZVInstallmentsActive();
       $isPayLaterEnabled = $this->_helper->getZVPayLaterActive();
 
-      $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: SalesOrderShipmentSaveAfter() INIT");
-      $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: isInstallmentsEnabled:$isInstallmentsEnabled, isPayLaterEnabled:$isPayLaterEnabled");
+      $zaverApiKey = $helper->getZVApiKey();
+      $zaverTestMode = $helper->getZVTestMode();
 
-      $zaverApiKey = $this->_helper->getZVApiKey();
-      $zaverTestMode = $this->_helper->getZVTestMode();
-
+      $strOrderStatus = $order->getStatus();
       $paymentId = $order->getData("zaver_payment_id");
       $roundPow = pow(10, 0);
       $amount = $order->getGrandTotal() * $roundPow;
@@ -92,9 +112,6 @@ class SalesOrderShipmentSaveAfter implements ObserverInterface
       }
 
       $aProdsShipped = $this->_shipments->getProductsShipped($orderId);
-      $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: getProductsShipped():" . print_r($aProdsShipped, true));
-      $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: paymentId:$paymentId, amount:$amount, orderItemsId:$strOrderItemsId");
-      $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: aZaverOrderItemsIds:" . print_r($aZaverOrderItemsIds, true));
 
       // If the order was paid with Zaver
       if (!empty($paymentId)) {
@@ -123,7 +140,6 @@ class SalesOrderShipmentSaveAfter implements ObserverInterface
         $zvStatusPmRes = $oCheckout->getPaymentStatus($paymentId);
         $zvStatusPm = $zvStatusPmRes->getPaymentStatus();
 
-        $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: zvStatusPmRes:" . print_r($zvStatusPmRes, true));
         $totalAmount = 0;
 
         // Send the shipping to zaver the first time
@@ -170,9 +186,6 @@ class SalesOrderShipmentSaveAfter implements ObserverInterface
           $strName = $orderItem->getName();
           $parentId = $item->getParentId();
 
-          $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: orderItemId:$orderItemId, iQty:$iQty");
-          $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: strName:$strName, parentId:$parentId");
-
           $productPriceTax = $orderItem->getBasePriceInclTax() * $roundPow;
 
           if ($orderHasDiscount) {
@@ -200,11 +213,7 @@ class SalesOrderShipmentSaveAfter implements ObserverInterface
           $iPriceTax = $orderItem->getTaxAmount() * $roundPow;
           $iVatRate = $orderItem->getTaxPercent();
 
-          $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: iPrice:$iPrice, iPriceTax:$iPriceTax, iVatRate:$iVatRate");
-
           $totalAmount += $iQty * $iPrice;
-
-          $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: value-$orderItemId:" . $aZaverOrderItemsIds[$orderItemId]);
 
           $item = \Zaver\SDK\Object\LineItem::create()
             ->setId($aZaverOrderItemsIds[$orderItemId])
@@ -221,25 +230,93 @@ class SalesOrderShipmentSaveAfter implements ObserverInterface
 
         $oPaymentCapReq->setCurrency($order->getOrderCurrencyCode())
           ->setAmount($totalAmount);
-        $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: oPaymentCapReq:" . print_r($oPaymentCapReq, true));
+
         if ($zvStatusPm != PaymentStatus::SETTLED && $zvStatusPm != PaymentStatus::CANCELLED) {
           $captureResp = $oCheckout->capturePayment($paymentId, $oPaymentCapReq);
-          $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: oPaymentCapReq->getPaymentStatus():" . $captureResp->getPaymentStatus());
-        }
-        /*if ($zaverOrder->status == 'shipping' && !$this->itemsAreShippable($order, $orderLines)) {
-          $this->messageManager->addWarningMessage(
-            __('All items in this order where already marked as shipped in the Zaver dashboard.')
-          );
-          return $this;
-        }*/
-        //}
-      }
+          $resCaptureStatus = $captureResp->getPaymentStatus();
+          $capturedAmount = $captureResp->getAmount();
+          $captureTransactionId = $captureResp->getPaymentCaptureId();
 
-      $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: SalesOrderShipmentSaveAfter() END");
+          if ($resCaptureStatus == $helper::ZAVER_CAPTURE_STATUS_PENDING ||
+            $resCaptureStatus == $helper::ZAVER_CAPTURE_STATUS_FULLY
+          ) {
+            // Successfull capture in Zaver
+            $bOrderHasInvoice = $order->hasInvoices();
+
+            if ($capturedAmount > 0) {
+              if (!empty($captureTransactionId)) {
+                $transactionId = $captureTransactionId;
+              } else {
+                $transactionId = $this->_shipments->getNextTransaction($orderId, $paymentId,
+                  \Magento\Sales\Model\Order\Payment\Transaction::TYPE_CAPTURE);
+              }
+
+              $paymentData = array("id" => $transactionId, "capturedAmount" => $capturedAmount,
+                "paymentStatus" => $resCaptureStatus, "parentid" => $paymentId);
+
+              if ($resCaptureStatus == $helper::ZAVER_CAPTURE_STATUS_FULLY) {
+                $this->_shipments->setProductsCapture($transactionId, $shipId);
+
+                $this->createTransaction($order, $paymentData, true);
+
+                if (!$bOrderHasInvoice) {
+                  $invoice = $this->_invoiceService->prepareInvoice($order);
+                  $invoice->setTransactionId($transactionId);
+                  $invoice->setRequestedCaptureCase(\Magento\Sales\Model\Order\Invoice::CAPTURE_ONLINE);
+                  $invoice->setState(\Magento\Sales\Model\Order\Invoice::STATE_PAID);
+                  $invoice->register();
+
+                  $savedTransaction = $this->_dbTransaction->addObject($invoice)->addObject($invoice->getOrder());
+                  $savedTransaction->save();
+                }
+
+                if ($strOrderStatus != \Magento\Sales\Model\Order::STATE_COMPLETE) {
+                  $order->setState(\Magento\Sales\Model\Order::STATE_COMPLETE)
+                    ->setStatus(\Magento\Sales\Model\Order::STATE_COMPLETE);
+                }
+
+                // Payment success
+                $order->setData('zaver__status', 1);
+                $order->save();
+              }
+              elseif ($resCaptureStatus == $helper::ZAVER_CAPTURE_STATUS_PENDING) {
+                $this->_shipments->setProductsCapture($transactionId, $shipId);
+
+                $this->createTransaction($order, $paymentData, false);
+
+                if (!$bOrderHasInvoice) {
+                  $invoice = $this->_invoiceService->prepareInvoice($order);
+                  $invoice->setTransactionId($transactionId);
+                  $invoice->setRequestedCaptureCase(\Magento\Sales\Model\Order\Invoice::CAPTURE_ONLINE);
+                  $invoice->setState(\Magento\Sales\Model\Order\Invoice::STATE_OPEN);
+                  $invoice->register();
+
+                  $savedTransaction = $this->_dbTransaction->addObject($invoice)->addObject($invoice->getOrder());
+                  $savedTransaction->save();
+                }
+
+                if ($strOrderStatus == \Magento\Sales\Model\Order::STATE_PENDING_PAYMENT) {
+                  $order->setState(\Magento\Sales\Model\Order::STATE_PROCESSING)
+                    ->setStatus(\Magento\Sales\Model\Order::STATE_PROCESSING);
+                }
+
+                // Payment success
+                $order->setData('zaver__status', 1);
+                $order->save();
+              }
+            }
+          }
+          else {
+            $this->messageManager->addWarningMessage(
+              __('The shipment can not been processed. Please try again later.')
+            );
+            return $this;
+          }
+        }
+      }
     }
     catch
     (\Exception $e) {
-      $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: SalesOrderShipmentSaveAfter ERROR:" . $e->getMessage());
       $this->messageManager->addWarningMessage(
         __($e->getMessage())
       );
@@ -327,5 +404,49 @@ class SalesOrderShipmentSaveAfter implements ObserverInterface
      * are shipped.
      */
     return array_sum($shippableOrderItems) == 0;
+  }
+
+  public function createTransaction($order = null, $paymentData = array(), $bTranClosed = false) {
+    try {
+      // Get payment object from order object
+      $payment = $order->getPayment();
+      $payment->setLastTransId($paymentData['id']);
+      $payment->setTransactionId($paymentData['id']);
+      $payment->setIsTransactionClosed($bTranClosed);
+      $payment->setParentTransactionId($paymentData['parentid']);
+      $payment->setAdditionalInformation(
+        [\Magento\Sales\Model\Order\Payment\Transaction::RAW_DETAILS => (array)$paymentData]
+      );
+      $formatedPrice = $order->getBaseCurrency()->formatTxt(
+        $paymentData["capturedAmount"]
+      );
+
+      $paymentData["capturedAmount"] = $formatedPrice;
+
+      $message = __('The captured amount is %1.', $formatedPrice);
+      // Get the object of builder class
+      $trans = $this->_tranBuilder;
+      $transaction = $trans->setPayment($payment)
+        ->setOrder($order)
+        ->setTransactionId($paymentData['id'])
+        ->setAdditionalInformation(
+          [\Magento\Sales\Model\Order\Payment\Transaction::RAW_DETAILS => (array)$paymentData]
+        )
+        ->setFailSafe(true)
+        // Build method creates the transaction and returns the object
+        ->build(\Magento\Sales\Model\Order\Payment\Transaction::TYPE_CAPTURE);
+
+      $payment->addTransactionCommentsToOrder(
+        $transaction,
+        $message
+      );
+
+      $payment->save();
+      $order->save();
+
+      return $transaction->save()->getTransactionId();
+    }
+    catch (Exception $e) {
+    }
   }
 }

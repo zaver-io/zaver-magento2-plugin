@@ -26,6 +26,11 @@ abstract class AbstractCheckoutAction extends \Zaver\Payment\Controller\Abstract
   private $_helper;
 
   /**
+   * @var \Magento\Sales\Model\Order\Payment\Transaction\Builder
+   */
+  protected $_tranBuilder;
+
+  /**
    * @param \Magento\Framework\App\Action\Context $context
    * @param \Magento\Checkout\Model\Session $checkoutSession
    */
@@ -34,12 +39,14 @@ abstract class AbstractCheckoutAction extends \Zaver\Payment\Controller\Abstract
     \Psr\Log\LoggerInterface $logger,
     \Magento\Checkout\Model\Session $checkoutSession,
     \Magento\Sales\Model\OrderFactory $orderFactory,
-    \Zaver\Payment\Helper\Data $helper
+    \Zaver\Payment\Helper\Data $helper,
+    \Magento\Sales\Model\Order\Payment\Transaction\Builder $tranBuilder
   ) {
     parent::__construct($context, $logger);
     $this->_checkoutSession = $checkoutSession;
     $this->_orderFactory = $orderFactory;
     $this->_helper = $helper;
+    $this->_tranBuilder = $tranBuilder;
   }
 
   /**
@@ -66,6 +73,14 @@ abstract class AbstractCheckoutAction extends \Zaver\Payment\Controller\Abstract
    */
   protected function getHelper() {
     return $this->_helper;
+  }
+
+  /**
+   * Get an Instance of transaction builder
+      * @return \Magento\Sales\Model\Order\Payment\Transaction\Builder
+   */
+  protected function getTransactionBuilder() {
+    return $this->_tranBuilder;
   }
 
   /**

@@ -64,7 +64,6 @@ class Creditmemo extends AbstractModel
       }
     }
     catch (\Exception $ex) {
-      $this->_logger->log(\Psr\Log\LogLevel::INFO, "ERROR" . $ex->getMessage());
     }
 
     return $aData;
@@ -83,7 +82,6 @@ class Creditmemo extends AbstractModel
       $connection->query($query);
     }
     catch (Exception $ex) {
-      $this->_logger->log(\Psr\Log\LogLevel::INFO, "ERROR" . $ex->getMessage());
     }
   }
 
@@ -99,7 +97,6 @@ class Creditmemo extends AbstractModel
       $connection->query($query);
     }
     catch (Exception $ex) {
-      $this->_logger->log(\Psr\Log\LogLevel::INFO, "ERROR" . $ex->getMessage());
     }
   }
 
@@ -124,9 +121,6 @@ class Creditmemo extends AbstractModel
 
       $result = $connection->fetchAll($query);
 
-      $this->_logger->log(\Psr\Log\LogLevel::INFO, "query:$query");
-      $this->_logger->log(\Psr\Log\LogLevel::INFO, "result:" . print_r($result, true));
-
       /**
        * Output the results
        */
@@ -140,9 +134,44 @@ class Creditmemo extends AbstractModel
       }
     }
     catch (\Exception $ex) {
-      $this->_logger->log(\Psr\Log\LogLevel::INFO, "ERROR" . $ex->getMessage());
     }
 
     return $aItems;
+  }
+
+  /**
+   * Get the next number for transaction
+   *
+   * @return int
+   */
+  public function getNextTransaction($orderId, $paymentid, $txntype) {
+    try {
+      $strNextTransaction = $paymentid;
+
+      $connection = $this->_resourceConnection->getConnection();
+
+      $tableName1 = $this->_resourceConnection->getTableName('sales_payment_transaction');
+
+      /**
+       * Output the results
+       */
+      $query = "SELECT COUNT(txn_id)  AS cnt FROM " . $tableName1 . " WHERE ";
+      $query .= "order_id=$orderId AND txn_id LIKE '$paymentid-refund%' AND txn_type='$txntype'";
+
+      $result = $connection->fetchAll($query);
+
+      /**
+       * Output the results
+       */
+      foreach ($result as $aVar) {
+        if ($aVar["cnt"] > 0) {
+          $strNextTransaction = $paymentid . "-refund-" . $aVar["cnt"];
+        }
+      }
+    }
+    catch (\Exception $ex) {
+    }
+
+    return $strNextTransaction;
   }
 }

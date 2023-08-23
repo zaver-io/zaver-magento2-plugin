@@ -110,7 +110,6 @@ class ConfigProvider implements ConfigProviderInterface
       }
     }
     catch (Exception $e) {
-      $this->logger->log(\Psr\Log\LogLevel::INFO, "ERROR:" . $e->getMessage());
     }
 
     return [

@@ -60,57 +60,63 @@ class PaymentIsActiveObserver implements ObserverInterface
       $amount = $quote->getGrandTotal();
       $bisPayment = false;
 
-      $oCheckout = new \Zaver\SDK\Checkout($zaverApiKey, $zaverTestMode);
-      $oPaymentReq = PaymentMethodsRequest::create()
-        ->setCurrency($currencyCode)
-        ->setAmount($amount);
 
-      $oPaymentRes = $oCheckout->getPaymentMethods($oPaymentReq);
+      if ($amount > 0 && ($method->getCode() == 'zaver_installments' ||
+          $method->getCode() == 'zaver_paylater')
+      ) {
 
-      if ($method->getCode() == 'zaver_installments') {
-        if ($isInstallmentsEnabled && $currencyCode == 'EUR') {
-          if (count($oPaymentRes["paymentMethods"]) > 0) {
-            foreach ($oPaymentRes["paymentMethods"] as $method) {
-              $methodCode = $method["paymentMethod"];
+        $oCheckout = new \Zaver\SDK\Checkout($zaverApiKey, $zaverTestMode);
+        $oPaymentReq = PaymentMethodsRequest::create()
+          ->setCurrency($currencyCode)
+          ->setAmount($amount);
 
-              if ($methodCode == $this->_helper->getZaverInstallmentsCode()) {
-                $bisPayment = true;
+        $oPaymentRes = $oCheckout->getPaymentMethods($oPaymentReq);
+
+        if ($method->getCode() == 'zaver_installments') {
+          if ($isInstallmentsEnabled && $currencyCode == 'EUR') {
+            if (count($oPaymentRes["paymentMethods"]) > 0) {
+              foreach ($oPaymentRes["paymentMethods"] as $method) {
+                $methodCode = $method["paymentMethod"];
+
+                if ($methodCode == $this->_helper->getZaverInstallmentsCode()) {
+                  $bisPayment = true;
+                }
               }
             }
-          }
 
-          if ($bisPayment) {
-            $result->setData('is_available', true);
+            if ($bisPayment) {
+              $result->setData('is_available', true);
+            }
+            else {
+              $result->setData('is_available', false);
+            }
           }
           else {
             $result->setData('is_available', false);
           }
         }
-        else {
-          $result->setData('is_available', false);
-        }
-      }
-      elseif ($method->getCode() == 'zaver_paylater') {
-        if ($isPayLaterEnabled && $currencyCode == 'EUR') {
-          if (count($oPaymentRes["paymentMethods"]) > 0) {
-            foreach ($oPaymentRes["paymentMethods"] as $method) {
-              $methodCode = $method["paymentMethod"];
+        elseif ($method->getCode() == 'zaver_paylater') {
+          if ($isPayLaterEnabled && $currencyCode == 'EUR') {
+            if (count($oPaymentRes["paymentMethods"]) > 0) {
+              foreach ($oPaymentRes["paymentMethods"] as $method) {
+                $methodCode = $method["paymentMethod"];
 
-              if ($methodCode == $this->_helper->getZaverPayLaterCode()) {
-                $bisPayment = true;
+                if ($methodCode == $this->_helper->getZaverPayLaterCode()) {
+                  $bisPayment = true;
+                }
               }
             }
-          }
 
-          if ($bisPayment) {
-            $result->setData('is_available', true);
+            if ($bisPayment) {
+              $result->setData('is_available', true);
+            }
+            else {
+              $result->setData('is_available', false);
+            }
           }
           else {
             $result->setData('is_available', false);
           }
-        }
-        else {
-          $result->setData('is_available', false);
         }
       }
       else {
@@ -119,7 +125,6 @@ class PaymentIsActiveObserver implements ObserverInterface
     }
     catch
     (\Exception $e) {
-      $this->_logger->log(\Psr\Log\LogLevel::INFO, "ERROR:" . $e->getMessage());
     }
   }
 }

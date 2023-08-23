@@ -24,9 +24,10 @@ abstract class AbstractCheckoutRedirectAction extends \Zaver\Payment\Controller\
     \Magento\Checkout\Model\Session $checkoutSession,
     \Magento\Sales\Model\OrderFactory $orderFactory,
     \Zaver\Payment\Helper\Data $helper,
-    \Zaver\Payment\Helper\Checkout $checkoutHelper
+    \Zaver\Payment\Helper\Checkout $checkoutHelper,
+    \Magento\Sales\Model\Order\Payment\Transaction\Builder $tranBuilder
   ) {
-    parent::__construct($context, $logger, $checkoutSession, $orderFactory, $helper);
+    parent::__construct($context, $logger, $checkoutSession, $orderFactory, $helper, $tranBuilder);
     $this->_checkoutHelper = $checkoutHelper;
   }
 

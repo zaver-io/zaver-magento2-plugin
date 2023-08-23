@@ -6,7 +6,7 @@
             <zaver_paylater>
                 <active>0</active>
                 <model>Zaver\Payment\Model\Paylater</model>
-                <title>Zaver-Später bezahle</title>
+                <title>Zaver-Später bezahlen</title>
                 <order_status_pending>pending_payment</order_status_pending>
                 <allowspecific>0</allowspecific>
                 <can_order>1</can_order>

@@ -72,7 +72,6 @@ class OrderCancelAfter implements ObserverInterface
     }
     catch
     (\Exception $e) {
-      $this->_logger->log(\Psr\Log\LogLevel::INFO, "ERROR:" . $e->getMessage());
     }
   }
 }

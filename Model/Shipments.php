@@ -64,7 +64,6 @@ class Shipments extends AbstractModel
       }
     }
     catch (\Exception $ex) {
-      $this->_logger->log(\Psr\Log\LogLevel::INFO, " ERROR in getProductsShipped():" . $ex->getMessage());
     }
 
     return $aData;
@@ -83,23 +82,21 @@ class Shipments extends AbstractModel
       $connection->query($query);
     }
     catch (Exception $ex) {
-      $this->_logger->log(\Psr\Log\LogLevel::INFO, " ERROR in addShippedProducts():" . $ex->getMessage());
     }
   }
 
-  public function setProductsCapture($paymentid, $orderid, $shipid) {
+  public function setProductsCapture($paymentid, $shipid) {
     try {
       $connection = $this->_resourceConnection->getConnection();
 
       /**
        * Execute the query
        */
-      $query = "UPDATE `zaver_shipments` SET `zaver_transaction_id`='$paymentid',`captured`=1 WHERE `order_id`=$orderid AND `ship_id`=$shipid";
+      $query = "UPDATE `zaver_shipments` SET `zaver_transaction_id`='$paymentid',`captured`=1 WHERE `ship_id`=$shipid";
 
       $connection->query($query);
     }
     catch (Exception $ex) {
-      $this->_logger->log(\Psr\Log\LogLevel::INFO, " ERROR in addShippedProducts():" . $ex->getMessage());
     }
   }
 
@@ -124,8 +121,6 @@ class Shipments extends AbstractModel
 
       $result = $connection->fetchAll($query);
 
-      $this->_logger->log(\Psr\Log\LogLevel::INFO, "query:$query");
-
       /**
        * Output the results
        */
@@ -139,7 +134,6 @@ class Shipments extends AbstractModel
       }
     }
     catch (\Exception $ex) {
-      $this->_logger->log(\Psr\Log\LogLevel::INFO, " ERROR in getProductsShipped():" . $ex->getMessage());
     }
 
     return $aItems;
@@ -166,8 +160,6 @@ class Shipments extends AbstractModel
 
       $result = $connection->fetchAll($query);
 
-      $this->_logger->log(\Psr\Log\LogLevel::INFO, "query:$query");
-
       /**
        * Output the results
        */
@@ -178,9 +170,8 @@ class Shipments extends AbstractModel
       }
     }
     catch (\Exception $ex) {
-      $this->_logger->log(\Psr\Log\LogLevel::INFO, " ERROR in getNextTransaction():" . $ex->getMessage());
     }
-    $this->_logger->log(\Psr\Log\LogLevel::INFO, "getNextTransaction():$strNextTransaction");
+
     return $strNextTransaction;
   }
 }

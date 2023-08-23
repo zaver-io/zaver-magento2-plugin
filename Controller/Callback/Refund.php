@@ -41,7 +41,6 @@ class Refund extends \Zaver\Payment\Controller\AbstractCallbackAction implements
       $successOrderState = \Magento\Sales\Model\Order::STATE_PROCESSING;
       $failedOrderState = \Magento\Sales\Model\Order::STATE_CANCELED;
 
-
       $this->getResponse()->setHttpResponseCode(200);
     }
     catch (\Exception $e) {

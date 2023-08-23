@@ -41,14 +41,22 @@ class SalesOrderCreditmemoSaveAfter implements ObserverInterface
    */
   private $_creditmemo;
 
+  /**
+   * @var \Magento\Sales\Model\Order\Payment\Transaction\Builder
+   */
+  protected $_tranBuilder;
+
   public function __construct(\Psr\Log\LoggerInterface $logger,
                               \Magento\Framework\Message\ManagerInterface $messageManager,
                               \Zaver\Payment\Helper\Data $data,
-                              \Zaver\Payment\Model\Creditmemo $creditmemo) {
+                              \Zaver\Payment\Model\Creditmemo $creditmemo,
+                              \Magento\Sales\Model\Order\Payment\Transaction\Builder $tranBuilder
+  ) {
     $this->_logger = $logger;
     $this->messageManager = $messageManager;
     $this->_helper = $data;
     $this->_creditmemo = $creditmemo;
+    $this->_tranBuilder = $tranBuilder;
   }
 
   /**
@@ -74,9 +82,6 @@ class SalesOrderCreditmemoSaveAfter implements ObserverInterface
       $isInstallmentsEnabled = $this->_helper->getZVInstallmentsActive();
       $isPayLaterEnabled = $this->_helper->getZVPayLaterActive();
 
-      $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: SalesOrderCreditmemoSaveAfter() INIT");
-      $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: isInstallmentsEnabled:$isInstallmentsEnabled, isPayLaterEnabled:$isPayLaterEnabled");
-
       $zaverApiKey = $this->_helper->getZVApiKey();
       $zaverTestMode = $this->_helper->getZVTestMode();
 
@@ -100,11 +105,8 @@ class SalesOrderCreditmemoSaveAfter implements ObserverInterface
       }
       $aProdsCreditmemo = $this->_creditmemo->getProductsCreditMemo($orderId);
 
-      $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: paymentId:$paymentId, amount:$amount, orderItemsId:$strOrderItemsId");
-      $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: aZaverOrderItemsIds:" . print_r($aZaverOrderItemsIds, true));
-
       // If the order was paid with Zaver
-      if (!empty($paymentId)) {
+      if (!empty($paymentId) && $isInstallmentsEnabled) {
         $oPaymentRefReq = RefundCreationRequest::create();
         $oRefund = new \Zaver\SDK\Refund($zaverApiKey, $zaverTestMode);
 
@@ -120,10 +122,6 @@ class SalesOrderCreditmemoSaveAfter implements ObserverInterface
 
           $orderItem = $item->getOrderItem();
           $iQty = (int)$item->getQty();
-
-          $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: orderItemId:$orderItemId, iQty:$iQty");
-
-
           $productPriceTax = $orderItem->getBasePriceInclTax() * $roundPow;
 
           if ($item->getBaseDiscountAmount()) {
@@ -148,11 +146,7 @@ class SalesOrderCreditmemoSaveAfter implements ObserverInterface
           $iPriceTax = 1;//$orderItem->getTaxAmount() * $roundPow;
           $iVatRate = 1;//$orderItem->getTaxPercent();
 
-          $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: iPrice:$iPrice, iPriceTax:$iPriceTax, iVatRate:$iVatRate");
-
           $totalAmount += $iQty * $iPrice;
-
-          $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: value-$orderItemId:" . $aZaverOrderItemsIds[$orderItemId]);
 
           $refundItem = RefundLineItem::create()
             ->setLineItemId($aZaverOrderItemsIds[$orderItemId])
@@ -189,10 +183,7 @@ class SalesOrderCreditmemoSaveAfter implements ObserverInterface
             $amountShipping, $aZaverOrderItemsIds[ItemType::SHIPPING]);
         }
 
-        $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: amountAdjustment:$amountAdjustment, amountAdjustmentNeg:$amountAdjustmentNeg, amountShipping:$amountShipping");
-
         $urlCallback = $this->_helper->getRefundCallbackUrl($orderId);
-        $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: urlCallback:$urlCallback");
 
         $urls = MerchantUrls::create()
           ->setCallbackUrl($urlCallback);
@@ -205,13 +196,11 @@ class SalesOrderCreditmemoSaveAfter implements ObserverInterface
 
         $refund = $oRefund->createRefund($oPaymentRefReq);
 
-        $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: refund->getStatus():" . $refund->getStatus());
-
         if ($refund->getStatus() == RefundStatus::PENDING_MERCHANT_APPROVAL && $totalAmount > 0) {
-          $appRefunRes = $oRefund->approveRefund($refund->getRefundId());
-          $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: appRefunRes->getStatus():" . $appRefunRes->getStatus());
+          $refundId = $refund->getRefundId();
+          $appRefunRes = $oRefund->approveRefund($refundId);
 
-          $order->setData('zaver_refund_id', $refund->getRefundId());
+          $order->setData('zaver_refund_id', $refundId);
           $order->save();
 
           if ($appRefunRes->getStatus() != RefundStatus::PENDING_EXECUTION) {
@@ -221,20 +210,65 @@ class SalesOrderCreditmemoSaveAfter implements ObserverInterface
             return $this;
           }
           else {
-            $this->_creditmemo->setProductsCapture($refund->getRefundId(), $orderId);
+            $this->_creditmemo->setProductsCapture($refundId, $orderId);
+            //$transactionId = $this->_creditmemo->getNextTransaction($orderId, $paymentId,
+            //  \Magento\Sales\Model\Order\Payment\Transaction::TYPE_REFUND);
+            $paymentData = array("id" => $refundId, "refundAmount" => $refund->getRefundAmount(),
+              "refundStatus" => $refund->getStatus(), "parentid" => $paymentId);
+            //$this->createTransaction($order, $paymentData, false);
           }
         }
       }
-
-      $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: SalesOrderCreditmemoSaveAfter() END");
     }
     catch
     (\Exception $e) {
-      $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: SalesOrderCreditmemoSaveAfter ERROR:" . $e->getMessage());
       $this->messageManager->addWarningMessage(
         __($e->getMessage())
       );
       return $this;
+    }
+  }
+
+  public function createTransaction($order = null, $paymentData = array(), $bTranClosed = false) {
+    try {
+      // Get payment object from order object
+      $payment = $order->getPayment();
+      $payment->setLastTransId($paymentData['id']);
+      $payment->setTransactionId($paymentData['id']);
+      $payment->setIsTransactionClosed($bTranClosed);
+      $payment->setParentTransactionId($paymentData['parentid']);
+      $payment->setAdditionalInformation(
+        [\Magento\Sales\Model\Order\Payment\Transaction::RAW_DETAILS => (array)$paymentData]
+      );
+      $formatedPrice = $order->getBaseCurrency()->formatTxt(
+        $paymentData["refundAmount"]
+      );
+
+      $paymentData["refundAmount"] = $formatedPrice;
+
+      $message = __('The refunded amount is %1.', $formatedPrice);
+      // Get the object of builder class
+      $trans = $this->_tranBuilder;
+      $transaction = $trans->setPayment($payment)
+        ->setOrder($order)
+        ->setTransactionId($paymentData['id'])
+        ->setAdditionalInformation(
+          [\Magento\Sales\Model\Order\Payment\Transaction::RAW_DETAILS => (array)$paymentData]
+        )
+        ->setFailSafe(true)
+        // Build method creates the transaction and returns the object
+        ->build(\Magento\Sales\Model\Order\Payment\Transaction::TYPE_REFUND);
+
+      $payment->addTransactionCommentsToOrder(
+        $transaction,
+        $message
+      );
+
+      $payment->save();
+      $order->save();
+      return $transaction->save()->getTransactionId();
+    }
+    catch (Exception $e) {
     }
   }
 }

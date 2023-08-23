@@ -286,6 +286,10 @@ class Index extends \Zaver\Payment\Controller\AbstractCheckoutAction
 
           $order->setData('zaver_order_items_id', $strParKey);
 
+          $paymentData = array("id" => $paymentZvId, "authorizeAmount" => $payment->getAmount(),
+            "paymentStatus" => $payment->getPaymentStatus());
+          $this->createTransaction($order, $paymentData, false);
+
           // Change the order status
           $order->setState(\Magento\Sales\Model\Order::STATE_PENDING_PAYMENT)
             ->setStatus(\Magento\Sales\Model\Order::STATE_PENDING_PAYMENT)
@@ -303,6 +307,48 @@ class Index extends \Zaver\Payment\Controller\AbstractCheckoutAction
       catch (Exception $e) {
         $this->redirectToCheckoutFragmentPayment();
       }
+    }
+  }
+
+  public function createTransaction($order = null, $paymentData = array(), $bTranClosed = false) {
+    try {
+      // Get payment object from order object
+      $payment = $order->getPayment();
+      $payment->setLastTransId($paymentData['id']);
+      $payment->setTransactionId($paymentData['id']);
+      $payment->setIsTransactionClosed($bTranClosed);
+      $payment->setAdditionalInformation(
+        [\Magento\Sales\Model\Order\Payment\Transaction::RAW_DETAILS => (array)$paymentData]
+      );
+      $formatedPrice = $order->getBaseCurrency()->formatTxt(
+        $paymentData["authorizeAmount"]
+      );
+
+      $paymentData["authorizeAmount"] = $formatedPrice;
+
+      $message = __('The authorized amount is %1.', $formatedPrice);
+      // Get the object of builder class
+      $trans = $this->getTransactionBuilder();
+      $transaction = $trans->setPayment($payment)
+        ->setOrder($order)
+        ->setTransactionId($paymentData['id'])
+        ->setAdditionalInformation(
+          [\Magento\Sales\Model\Order\Payment\Transaction::RAW_DETAILS => (array)$paymentData]
+        )
+        ->setFailSafe(true)
+        // Build method creates the transaction and returns the object
+        ->build(\Magento\Sales\Model\Order\Payment\Transaction::TYPE_AUTH);
+
+      $payment->addTransactionCommentsToOrder(
+        $transaction,
+        $message
+      );
+      $payment->setParentTransactionId(null);
+      $payment->save();
+      $order->save();
+      return $transaction->save()->getTransactionId();
+    }
+    catch (Exception $e) {
     }
   }
 }

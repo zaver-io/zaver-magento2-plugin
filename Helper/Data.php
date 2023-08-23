@@ -57,6 +57,9 @@ class Data extends AbstractHelper
   const ZAVER_PAYLATER_CODE = 'PAY_LATER';
   const ZAVER_INSTALLMENTS_CODE = 'INSTALLMENTS';
 
+  const ZAVER_CAPTURE_STATUS_PENDING = 'PENDING_MERCHANT_SIGNOFF';
+  const ZAVER_CAPTURE_STATUS_FULLY = 'FULLY_CAPTURED';
+
   /**
    *
    * @var array
