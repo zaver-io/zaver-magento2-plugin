@@ -156,7 +156,7 @@ class Creditmemo extends AbstractModel
        * Output the results
        */
       $query = "SELECT COUNT(txn_id)  AS cnt FROM " . $tableName1 . " WHERE ";
-      $query .= "order_id=$orderId AND txn_id LIKE '$paymentid-refund%' AND txn_type='$txntype'";
+      $query .= "order_id=$orderId AND txn_id LIKE '$paymentid%' AND txn_type='$txntype'";
 
       $result = $connection->fetchAll($query);
 
@@ -165,7 +165,7 @@ class Creditmemo extends AbstractModel
        */
       foreach ($result as $aVar) {
         if ($aVar["cnt"] > 0) {
-          $strNextTransaction = $paymentid . "-refund-" . $aVar["cnt"];
+          $strNextTransaction = $paymentid . "-" . $aVar["cnt"];
         }
       }
     }

@@ -8,6 +8,7 @@ use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\Module\ModuleListInterface;
 use Magento\Store\Model\StoreManagerInterface;
 use Magento\Framework\Exception\NoSuchEntityException;
+use Magento\Framework\ObjectManagerInterface;
 
 class Data extends AbstractHelper
 {
@@ -25,6 +26,11 @@ class Data extends AbstractHelper
    * @var \Magento\Store\Model\StoreManagerInterface
    */
   protected $storeManager;
+
+  /**
+   * @var \Magento\Framework\ObjectManagerInterface
+   */
+  protected $objectManager;
 
   const LOG_FILENAME = 'zaver.log';
   const ERROR_LOG_PATH = "/zaver/zaver.log";
@@ -80,10 +86,12 @@ class Data extends AbstractHelper
   public function __construct(Context $context,
                               ScopeConfigInterface $scopeConfig,
                               ModuleListInterface $moduleList,
-                              StoreManagerInterface $storeManager) {
+                              StoreManagerInterface $storeManager,
+                              ObjectManagerInterface $objectManager) {
     $this->scopeConfig = $scopeConfig;
     $this->moduleList = $moduleList;
     $this->storeManager = $storeManager;
+    $this->objectManager = $objectManager;
 
     parent::__construct($context);
   }
@@ -224,5 +232,14 @@ class Data extends AbstractHelper
    */
   public function getErrorLogPath() {
     return self::ERROR_LOG_PATH;
+  }
+
+  /**
+   * Get an Instance of the Magento Object Manager
+   * @return \Magento\Framework\ObjectManagerInterface
+   */
+  public function getObjectManager()
+  {
+    return $this->objectManager;
   }
 }

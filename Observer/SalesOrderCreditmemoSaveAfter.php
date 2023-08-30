@@ -18,6 +18,7 @@ use Zaver\SDK\Config\PaymentStatus;
 use Zaver\SDK\Object\RefundLineItem;
 use Zaver\SDK\Config\ItemType;
 use Zaver\SDK\Object\MerchantUrls;
+use Magento\Sales\Api\TransactionRepositoryInterface;
 
 class SalesOrderCreditmemoSaveAfter implements ObserverInterface
 {
@@ -46,17 +47,24 @@ class SalesOrderCreditmemoSaveAfter implements ObserverInterface
    */
   protected $_tranBuilder;
 
+  /**
+   * @var \Magento\Sales\Api\TransactionRepositoryInterface
+   */
+  private $_tranRepository;
+
   public function __construct(\Psr\Log\LoggerInterface $logger,
                               \Magento\Framework\Message\ManagerInterface $messageManager,
                               \Zaver\Payment\Helper\Data $data,
                               \Zaver\Payment\Model\Creditmemo $creditmemo,
-                              \Magento\Sales\Model\Order\Payment\Transaction\Builder $tranBuilder
+                              \Magento\Sales\Model\Order\Payment\Transaction\Builder $tranBuilder,
+                              \Magento\Sales\Api\TransactionRepositoryInterface $tranRepository
   ) {
     $this->_logger = $logger;
     $this->messageManager = $messageManager;
     $this->_helper = $data;
     $this->_creditmemo = $creditmemo;
     $this->_tranBuilder = $tranBuilder;
+    $this->_tranRepository = $tranRepository;
   }
 
   /**
@@ -211,11 +219,47 @@ class SalesOrderCreditmemoSaveAfter implements ObserverInterface
           }
           else {
             $this->_creditmemo->setProductsCapture($refundId, $orderId);
-            //$transactionId = $this->_creditmemo->getNextTransaction($orderId, $paymentId,
+
+            $payment = $order->getPayment();
+
+            $lastPaymentTransactionId = $payment->getLastTransId();
+            $transaction = $this->_helper->getObjectManager()->create(
+              "\\Magento\\Sales\\Model\\Order\\Payment\\Transaction"
+            )->load(
+              $lastPaymentTransactionId,
+              'txn_id'
+            );
+
+            //$transactionId = $this->_creditmemo->getNextTransaction($orderId, $lastPaymentTransactionId,
             //  \Magento\Sales\Model\Order\Payment\Transaction::TYPE_REFUND);
-            $paymentData = array("id" => $refundId, "refundAmount" => $refund->getRefundAmount(),
-              "refundStatus" => $refund->getStatus(), "parentid" => $paymentId);
-            //$this->createTransaction($order, $paymentData, false);
+
+            $transactionId = $transaction->getTransactionId();
+            $txnId = $transaction->getTxnId();
+            $parentTxnId = $transaction->getParentTxnId();
+            $txnType = $transaction->getTxnType();
+
+            if (!isset($transaction)) {
+              $this->messageManager->addWarningMessage(
+                __('The refund can not been processed. Please try again later.')
+              );
+              return $this;
+            }
+            else {
+              try {
+                $transaction = $this->_tranRepository->get($transactionId);
+                if ($transaction) {
+                  $transaction->setParentTxnId($paymentId);
+                  $transaction->setTxnId($refundId);
+                  $saveTransaction = $this->_tranRepository->save($transaction);
+                }
+              } catch (NoSuchEntityException $ex) {
+              }
+
+              $formatedPrice = $order->getBaseCurrency()->formatTxt($refund->getRefundAmount());
+              $paymentData = array("id" => $refundId, "refundAmount" => $formatedPrice,
+                "refundStatus" => $refund->getStatus(), "parentid" => $paymentId);
+              //$this->createTransaction($order, $paymentData, false);
+            }
           }
         }
       }
