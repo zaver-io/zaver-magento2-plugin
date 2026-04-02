@@ -9,6 +9,7 @@ use Magento\Framework\Module\ModuleListInterface;
 use Magento\Store\Model\StoreManagerInterface;
 use Magento\Framework\Exception\NoSuchEntityException;
 use Magento\Framework\ObjectManagerInterface;
+use Magento\Sales\Model\Order\Email\Sender\OrderSender;
 
 class Data extends AbstractHelper
 {
@@ -31,6 +32,11 @@ class Data extends AbstractHelper
    * @var \Magento\Framework\ObjectManagerInterface
    */
   protected $objectManager;
+
+    /**
+   * @var \Magento\Sales\Model\Order\Email\Sender\OrderSender
+   */
+  protected $OrderSender;
 
   const LOG_FILENAME = 'zaver.log';
   const ERROR_LOG_PATH = "/zaver/zaver.log";
@@ -58,10 +64,16 @@ class Data extends AbstractHelper
   const XML_PATH_ZV_TESTMODE = 'payment/zaver/testmode';
   const XML_PATH_ZV_PAYLATER_ACTIVE = 'payment/zaver_paylater/active';
   const XML_PATH_ZV_INSTALLMENTS_ACTIVE = 'payment/zaver_installments/active';
+  const XML_PATH_ZV_PAYMENTLINK_ACTIVE = 'payment/zaver_paymentlink/active';
+  const XML_PATH_ZV_BANKTRANSFER_ACTIVE = 'payment/zaver_banktransfer/active';
   const XML_PATH_GN_LOCALE = 'general/locale/code';
 
   const ZAVER_PAYLATER_CODE = 'PAY_LATER';
   const ZAVER_INSTALLMENTS_CODE = 'INSTALLMENTS';
+  const ZAVER_PAYMENTLINK_CODE = 'PAYMENTLINK';
+  const ZAVER_SWISH_CODE = 'SWISH';
+  const ZAVER_BANKTRANSFER_CODE = 'BANK_TRANSFER';
+  const ZAVER_DIRECT_DEBIT_CODE = 'DIRECT_DEBIT';
 
   const ZAVER_CAPTURE_STATUS_PENDING = 'PENDING_MERCHANT_SIGNOFF';
   const ZAVER_CAPTURE_STATUS_FULLY = 'FULLY_CAPTURED';
@@ -72,7 +84,11 @@ class Data extends AbstractHelper
    */
   private $methodsCode = [
     "zaver_paylater" => self::ZAVER_PAYLATER_CODE,
-    "zaver_installments" => self::ZAVER_INSTALLMENTS_CODE
+    "zaver_installments" => self::ZAVER_INSTALLMENTS_CODE,
+    "zaver_paymentlink" => self::ZAVER_PAYMENTLINK_CODE,
+    "zaver_swish" => self::ZAVER_SWISH_CODE,
+    "zaver_banktransfer" => self::ZAVER_BANKTRANSFER_CODE,
+    "zaver_trustly" => self::ZAVER_DIRECT_DEBIT_CODE
   ];
 
   /**
@@ -87,11 +103,13 @@ class Data extends AbstractHelper
                               ScopeConfigInterface $scopeConfig,
                               ModuleListInterface $moduleList,
                               StoreManagerInterface $storeManager,
-                              ObjectManagerInterface $objectManager) {
+                              ObjectManagerInterface $objectManager,
+                              OrderSender $OrderSender,) {
     $this->scopeConfig = $scopeConfig;
     $this->moduleList = $moduleList;
     $this->storeManager = $storeManager;
     $this->objectManager = $objectManager;
+    $this->OrderSender = $OrderSender;
 
     parent::__construct($context);
   }
@@ -143,6 +161,20 @@ class Data extends AbstractHelper
    */
   public function getZVInstallmentsActive() {
     return $this->scopeConfig->getValue(self::XML_PATH_ZV_INSTALLMENTS_ACTIVE, \Magento\Store\Model\ScopeInterface::SCOPE_STORE);
+  }
+
+  /**
+   * Get the active from Store->Settings->Configuration->Sales->Payment Methods->Zaver
+   */
+  public function getZVPaymentlinkActive() {
+    return $this->scopeConfig->getValue(self::XML_PATH_ZV_PAYMENTLINK_ACTIVE, \Magento\Store\Model\ScopeInterface::SCOPE_STORE);
+  }
+
+    /**
+   * Get the active from Store->Settings->Configuration->Sales->Payment Methods->Zaver
+   */
+  public function getZVBanktransferActive() {
+    return $this->scopeConfig->getValue(self::XML_PATH_ZV_BANKTRANSFER_ACTIVE, \Magento\Store\Model\ScopeInterface::SCOPE_STORE);
   }
 
   /**
@@ -221,6 +253,20 @@ class Data extends AbstractHelper
   }
 
   /**
+   * Get the pay later payment code
+   */
+  public function getZaverPaymentlinkCode() {
+    return self::ZAVER_PAYMENTLINK_CODE;
+  }
+
+    /**
+   * Get the banktransfer payment code
+   */
+  public function getZaverBanktransferCode() {
+    return self::ZAVER_BANKTRANSFER_CODE;
+  }
+
+  /**
    * Get the zaver method code
    */
   public function getZaverMethodCode($code) {
@@ -241,5 +287,14 @@ class Data extends AbstractHelper
   public function getObjectManager()
   {
     return $this->objectManager;
+  }
+  public function send($order)
+  {
+    $this->OrderSender->send($order, true);
+  }
+
+  public function getZVRate($price)
+  {
+    
   }
 }

@@ -12,4 +12,5 @@ class Installments extends \Zaver\Payment\Model\Payment
    * @var string
    */
   protected $_code = self::METHOD_CODE;
+  protected $_canUseInternal = false;
 }

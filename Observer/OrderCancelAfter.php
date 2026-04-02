@@ -9,6 +9,7 @@ use Magento\Checkout\Model\Session;
 use Zaver\SDK\Checkout;
 use Zaver\SDK\Object\PaymentUpdateRequest;
 use Zaver\SDK\Config\PaymentStatus;
+use Exception;
 
 class OrderCancelAfter implements ObserverInterface
 {
@@ -50,10 +51,16 @@ class OrderCancelAfter implements ObserverInterface
       // Check if the Payment Method Zaver module is enabled
       $isInstallmentsEnabled = $this->_helper->getZVInstallmentsActive();
       $isPayLaterEnabled = $this->_helper->getZVPayLaterActive();
+      $isPaymentlinkEnabled = $this->_helper->getZVPaymentlinkActive();
+      $isBanktransferEnabled = $this->_helper->getZVBanktransferActive();
 
       $zaverApiKey = $this->_helper->getZVApiKey();
       $zaverTestMode = $this->_helper->getZVTestMode();
 
+      if (empty($zaverApiKey)) { 
+        return; 
+        } 
+        
       $paymentId = $order->getData("zaver_payment_id");
 
       // If the order was paid with Zaver

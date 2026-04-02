@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" layout="1column"
-      xsi:noNamespaceSchemaLocation="../../../../../../../lib/internal/Magento/Framework/View/Layout/etc/page_configuration.xsd">
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/age_configuration.xsd">
     <body>
         <referenceBlock name="checkout.root">
             <arguments>
@@ -29,6 +29,11 @@
                                                                             </item>
                                                                         </item>
                                                                         <item name="zaver_installments" xsi:type="array">
+                                                                            <item name="isBillingAddressRequired"
+                                                                                  xsi:type="boolean">true
+                                                                            </item>
+                                                                        </item>
+                                                                          <item name="zaver_banktransfer" xsi:type="array">
                                                                             <item name="isBillingAddressRequired"
                                                                                   xsi:type="boolean">true
                                                                             </item>

@@ -1,0 +1,37 @@
+<?php
+/** @var \Zaver\Payment\View\Frontend\Web\Template\Installment\ZaverRate $block */
+/*
+if (!$block->isEnabled()) {
+    return;
+}
+    */
+?>
+
+<div id="product-page-zaver-apple-pay-button" data-bind="scope:'zaver-apple-pay-button'">
+    <!-- ko if: canUseApplePay() -->
+    <div class="<?= $block->escapeHtmlAttr($block->getButtonClasses()); ?>" data-bind="click: payWithApplePay">
+        <span>Apple Pay</span>
+    </div>
+    <!-- /ko -->
+</div>
+<script type="text/x-magento-init">
+{
+    "*": {
+        "Magento_Ui/js/core/app": {
+            "components": {
+                "zaver-apple-pay-button": {
+                    "component": "Zaver_Payment/js/view/product/apple-pay-button",
+                    "config": {
+                        "formSelector": "#product_price_form",
+                        "currencyCode": "<?= $block->escapeJs($block->getCurrencyCode()); ?>",
+                        "countryCode": "<?= $block->escapeJs($block->getCountryCode()); ?>",
+                        "productName": "<?= $block->escapeJs($block->getProductName()); ?>",
+                        "storeName": "<?= $block->escapeJs($block->getStoreName()); ?>",
+                        "supportedNetworks": <?= json_encode($block->getSupportedNetworks()); ?>
+                    }
+                }
+            }
+        }
+    }
+}
+</script>

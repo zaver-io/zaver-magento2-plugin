@@ -18,7 +18,8 @@ class Redirect extends \Zaver\Payment\Controller\AbstractCheckoutRedirectAction
   public function execute() {
     switch ($this->getReturnAction()) {
       case 'success':
-        $this->executeSuccessAction();
+        $orderId = $_GET['orderId'];
+        $this->executeSuccessAction($orderId);
         break;
 
       case 'cancel':

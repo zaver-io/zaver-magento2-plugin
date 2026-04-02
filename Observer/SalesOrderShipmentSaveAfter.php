@@ -15,6 +15,7 @@ use Zaver\SDK\Object\PaymentCaptureResponse;
 use Zaver\SDK\Config\PaymentStatus;
 use Zaver\SDK\Object\LineItem;
 use Zaver\SDK\Config\ItemType;
+use Exception; 
 
 class SalesOrderShipmentSaveAfter implements ObserverInterface
 {
@@ -56,7 +57,6 @@ class SalesOrderShipmentSaveAfter implements ObserverInterface
                               \Magento\Framework\DB\Transaction $transaction,
                               \Magento\Sales\Model\Order\Payment\Transaction\Builder $tranBuilder) {
     $this->_logger = $logger;
-    $this->messageManager = $messageManager;
     $this->_helper = $data;
     $this->_shipments = $shipments;
     $this->_invoiceService = $invoiceService;
@@ -87,10 +87,15 @@ class SalesOrderShipmentSaveAfter implements ObserverInterface
       // Check if the Payment Method Zaver module is enabled
       $isInstallmentsEnabled = $this->_helper->getZVInstallmentsActive();
       $isPayLaterEnabled = $this->_helper->getZVPayLaterActive();
+      $isBanktransferEnabled = $this->_helper->getZVBanktransferActive();
 
       $zaverApiKey = $helper->getZVApiKey();
       $zaverTestMode = $helper->getZVTestMode();
 
+      if (empty($zaverApiKey)) { 
+        return; 
+        } 
+        
       $strOrderStatus = $order->getStatus();
       $paymentId = $order->getData("zaver_payment_id");
       $roundPow = pow(10, 0);

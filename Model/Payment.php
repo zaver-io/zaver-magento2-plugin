@@ -4,6 +4,7 @@ namespace Zaver\Payment\Model;
 
 class Payment extends \Magento\Payment\Model\Method\AbstractMethod
 {
+
   protected $_code = 'zaver_payment';
   protected $_isGateway = true;
   protected $_canCapture = true;
@@ -12,10 +13,14 @@ class Payment extends \Magento\Payment\Model\Method\AbstractMethod
   protected $_canRefundInvoicePartial = true;
   protected $_isOffline = false;
   protected $_canVoid = true;
+  //protected $_canUseInternal = true;
+  protected $_isInitializeNeeded = true;
   protected $_request;
   protected $customerSession;
   protected $_checkoutSession;
   protected $zvDataHelper;
+
+  const CODE = 'zaver_payment';
 
   public function __construct(
     \Magento\Framework\Model\Context $context,
@@ -55,6 +60,7 @@ class Payment extends \Magento\Payment\Model\Method\AbstractMethod
   }
 
   public function authorize(\Magento\Payment\Model\InfoInterface $payment, $amount) {
+    
     if (!$this->canAuthorize()) {
       throw new \Magento\Framework\Exception\LocalizedException(__('The authorize action is not available .'));
     }
@@ -76,6 +82,23 @@ class Payment extends \Magento\Payment\Model\Method\AbstractMethod
   }
 
   public function isAvailable(\Magento\Quote\Api\Data\CartInterface $quote = null) {
+
     return parent::isAvailable($quote);
+  }
+
+  public function initialize($paymentAction, $stateObject)
+  {
+      /** @var \Magento\Sales\Model\Order\Payment $payment */
+      $payment = $this->getInfoInstance();
+
+      /** @var \Magento\Sales\Model\Order $order */
+      $order = $payment->getOrder();
+      $order->setCanSendNewEmailFlag(false);
+
+      $stateObject->setState(Order::STATE_PENDING_PAYMENT);
+
+      if ($status = $this->config->statusNewPaymentLink($order->getStoreId())) {
+          $stateObject->setStatus($status);
+      }
   }
 }

@@ -19,6 +19,7 @@ use Zaver\SDK\Object\RefundLineItem;
 use Zaver\SDK\Config\ItemType;
 use Zaver\SDK\Object\MerchantUrls;
 use Magento\Sales\Api\TransactionRepositoryInterface;
+use Exception; 
 
 class SalesOrderCreditmemoSaveAfter implements ObserverInterface
 {
@@ -89,10 +90,15 @@ class SalesOrderCreditmemoSaveAfter implements ObserverInterface
       // Check if the Payment Method Zaver module is enabled
       $isInstallmentsEnabled = $this->_helper->getZVInstallmentsActive();
       $isPayLaterEnabled = $this->_helper->getZVPayLaterActive();
+      $isBanktransferEnabled = $this->_helper->getZVBanktransferActive();
 
       $zaverApiKey = $this->_helper->getZVApiKey();
       $zaverTestMode = $this->_helper->getZVTestMode();
 
+      if (empty($zaverApiKey)) { 
+        return; 
+        } 
+        
       $paymentId = $order->getData("zaver_payment_id");
       $roundPow = pow(10, 0);
       $amount = $order->getGrandTotal() * $roundPow;

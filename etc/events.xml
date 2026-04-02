@@ -3,4 +3,10 @@
     <event name="payment_method_is_active">
         <observer name="zaver_payment_method_is_active" instance="Zaver\Payment\Observer\PaymentIsActiveObserver"/>
     </event>
+    <event name="checkout_submit_all_after">
+        <observer name="zaver_start_paylink" instance="Zaver\Payment\Observer\StartPaylink\StartPaylink" />
+    </event>
+    <event name="sales_order_invoice_register">
+        <observer name="zaver_sales_invoice_capture" instance="Zaver\Payment\Observer\SalesInvoiceCapture"/>
+    </event>
 </config>

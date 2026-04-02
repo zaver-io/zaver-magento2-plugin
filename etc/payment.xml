@@ -8,9 +8,15 @@
     </groups>
     <methods>
         <method name="zaver_paylater">
-            <allow_multiple_address>1</allow_multiple_address>
+            <allow_multiple_address>0</allow_multiple_address>
         </method>
         <method name="zaver_installments">
+            <allow_multiple_address>1</allow_multiple_address>
+        </method>
+            <method name="Zaver_Paymentlink">
+            <allow_multiple_address>1</allow_multiple_address>
+        </method>
+        <method name="zaver_banktransfer">
             <allow_multiple_address>1</allow_multiple_address>
         </method>
     </methods>

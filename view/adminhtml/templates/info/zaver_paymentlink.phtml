@@ -1,0 +1,32 @@
+<?php
+/*
+ * Copyright Magmodules.eu. All rights reserved.
+ * See COPYING.txt for license details.
+ */
+
+// @codingStandardsIgnoreFile
+/**
+ * @var \Zaver\Payment\Block\Info\Base $block
+ * @see \Zaver\Payment\Block\Info\Base
+ */
+$specificInfo = $block->getSpecificInformation();
+$status = $block->getPaymentStatus();
+?>
+<div class="zaver-method">
+    <img src="https://cdn.zaver.com/ui/brand/zaver_symbol.svg"/>
+    <?= $block->escapeHtml($block->getMethod()->getTitle()); ?>
+    </br>
+    <table class="data-table admin__table-secondary">
+    <tbody>
+    <tr class="zaver-checkout-url">
+                    <th><?= __('Checkout Url'); ?></th>
+                    <td>
+                        
+
+                    </td>
+                </tr>
+                </tbody>
+                </table>
+</div>
+<?= $block->getChildHtml() ?>
+

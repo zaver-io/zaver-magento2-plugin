@@ -13,6 +13,10 @@ abstract class AbstractCheckoutRedirectAction extends \Zaver\Payment\Controller\
    * @var \Zaver\Payment\Helper\Checkout
    */
   private $_checkoutHelper;
+      /**
+     * @var Session
+     */
+    private $checkoutSession;
 
   /**
    * @param \Magento\Framework\App\Action\Context $context
@@ -29,6 +33,7 @@ abstract class AbstractCheckoutRedirectAction extends \Zaver\Payment\Controller\
   ) {
     parent::__construct($context, $logger, $checkoutSession, $orderFactory, $helper, $tranBuilder);
     $this->_checkoutHelper = $checkoutHelper;
+    $this->checkoutSession = $checkoutSession;
   }
 
   /**
@@ -43,11 +48,30 @@ abstract class AbstractCheckoutRedirectAction extends \Zaver\Payment\Controller\
    * Handle Success Action
    * @return void
    */
-  protected function executeSuccessAction() {
+  protected function executeSuccessAction($orderId) {
     if ($this->getCheckoutSession()->getLastRealOrderId()) {
+      $zaveremail = $this->getHelper();
+      $order = $this->getOrderFactory()->create()->loadByIncrementId($orderId);
+      $order->setCanSendNewEmailFlag(true);
+      $order->save();
+      $this->checkoutSession->setForceOrderMailSentOnSuccess(true);
+      $zaveremail->send($order, true);
       $this->getMessageManager()->addSuccess(__("Your payment is complete"));
       $this->redirectToCheckoutOnePageSuccess();
     }
+
+    $order = $this->getOrderFactory()->create()->loadByIncrementId($orderId);
+    $zaveremail = $this->getHelper();
+    $order->setCanSendNewEmailFlag(true);
+    $order->save();
+    $this->checkoutSession->setForceOrderMailSentOnSuccess(true);
+    $zaveremail->send($order, true);
+    $this->checkoutSession->setLastOrderId($order->getId());
+    $this->checkoutSession->setLastRealOrderId($order->getIncrementId());
+    $this->checkoutSession->setLastSuccessQuoteId($order->getQuoteId());
+    $this->checkoutSession->setLastQuoteId($order->getQuoteId());
+    $this->getMessageManager()->addSuccess(__("Your payment is complete"));
+    $this->redirectToCheckoutOnePageSuccess();
   }
 
   /**

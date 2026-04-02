@@ -1,0 +1,33 @@
+<?php
+/**
+ * Copyright © 2018 Magmodules.eu. All rights reserved.
+ * See COPYING.txt for license details.
+ */
+
+// @codingStandardsIgnoreFile
+/**
+ * @var \zaver\Payment\Block\Info\Base $block
+ * @see \zaver\Payment\Block\Info\Base
+ */
+
+$specificInfo = $block->getSpecificInformation();
+$status = $block->getPaymentStatus();
+?>
+<div class="zaver-method">
+
+</div>
+<?= $block->getChildHtml() ?>
+
+<script type="text/x-magento-init">
+    {
+        ".zaver-method": {
+            "zaver_Payment/js/order/fetch-order-status": {
+                "endpoint": "<?php echo $block->getUrl('zaver/action/fetchOrderStatus'); ?>",
+                "order_id": "<?php echo $block->getOrderId(); ?>"
+            }
+        },
+        ".zaver-copy-url": {
+            "zaver_Payment/js/copy-url": {}
+        }
+    }
+</script>

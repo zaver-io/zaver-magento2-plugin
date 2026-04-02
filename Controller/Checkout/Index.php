@@ -40,6 +40,10 @@ class Index extends \Zaver\Payment\Controller\AbstractCheckoutAction
         $languageCode = $helper->getLocale();
         $logger = $this->getLogger();
 
+        if (empty($zaverApiKey)) { 
+          return; 
+          } 
+
         $api = new \Zaver\SDK\Checkout($zaverApiKey, $zaverTestMode);
 
         $aZaverItems = array();
@@ -175,7 +179,7 @@ class Index extends \Zaver\Payment\Controller\AbstractCheckoutAction
           $strAddress1 = $order->getBillingAddress()->getStreetLine(1);
           $strAddress2 = "";
           if (!empty($order->getBillingAddress()->getStreetLine(2))) {
-            $strAddress2 = " " . $order->getBillingAddress()->getStreetLine(2);
+            $strAddress1 .= " " . $order->getBillingAddress()->getStreetLine(2);
           }
 
           $strPostcode = $order->getBillingAddress()->getPostcode();
@@ -187,8 +191,8 @@ class Index extends \Zaver\Payment\Controller\AbstractCheckoutAction
           $billAdress = \Zaver\SDK\Object\Address::create()
             ->setName($billAdrName)
             ->setPostalCode($strPostcode)
-            ->setStreetName($strAddress1)
-            ->setHouseNumber($strAddress2)
+            ->setAddressLine1($strAddress1)
+            ->setAddressLine2($strAddress2)
             ->setCity($strCity)
             ->setCountry($strCountry);
 
@@ -200,7 +204,7 @@ class Index extends \Zaver\Payment\Controller\AbstractCheckoutAction
           $shipAddressAddress2 = "";
 
           if (!empty($order->getShippingAddress()->getStreetLine(2))) {
-            $shipAddressAddress2 = " " . $order->getShippingAddress()->getStreetLine(2);
+            $shipAddressAddress1 .= " " . $order->getShippingAddress()->getStreetLine(2);
           }
 
           $shipAddressPostcode = $order->getShippingAddress()->getPostcode();
@@ -212,8 +216,8 @@ class Index extends \Zaver\Payment\Controller\AbstractCheckoutAction
           $shippAdress = \Zaver\SDK\Object\Address::create()
             ->setName($shippAdrName)
             ->setPostalCode($shipAddressPostcode)
-            ->setStreetName($shipAddressAddress1)
-            ->setHouseNumber($shipAddressAddress2)
+            ->setAddressLine1($shipAddressAddress1)
+            ->setAddressLine2($shipAddressAddress2)
             ->setCity($shipAddressCity)
             ->setCountry($shipAddressCountry);
 
@@ -292,8 +296,7 @@ class Index extends \Zaver\Payment\Controller\AbstractCheckoutAction
 
           // Change the order status
           $order->setState(\Magento\Sales\Model\Order::STATE_PENDING_PAYMENT)
-            ->setStatus(\Magento\Sales\Model\Order::STATE_PENDING_PAYMENT)
-            ->addStatusToHistory(\Magento\Sales\Model\Order::STATE_PENDING_PAYMENT, "Order waiting for payment");
+            ->setStatus(\Magento\Sales\Model\Order::STATE_PENDING_PAYMENT);
           $order->save();
         }
 

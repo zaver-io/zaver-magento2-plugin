@@ -5,6 +5,7 @@ namespace Zaver\Payment\Controller\Callback;
 use Magento\Framework\App\CsrfAwareActionInterface;
 use Magento\Framework\App\Request\InvalidRequestException;
 use Magento\Framework\App\RequestInterface;
+use Exception;
 
 /**
  *
@@ -18,6 +19,7 @@ class Index extends \Zaver\Payment\Controller\AbstractCallbackAction implements 
    * @return void
    */
   public function execute() {
+
     if (!$this->getRequest()->isPost()) {
       return;
     }
@@ -38,28 +40,52 @@ class Index extends \Zaver\Payment\Controller\AbstractCallbackAction implements 
       $order = $this->getOrderFactory()->create()->loadByIncrementId($orderId);
       $strOrderStatus = $order->getStatus();
       $strOrderState = $order->getState();
+      $payment = $order->getPayment();
+      //$ZvStatus = array("paymentStatus" => $resCaptureStatus);
 
-      if ($strOrderStatus == \Magento\Sales\Model\Order::STATE_PENDING_PAYMENT) {
-        $setOrderStatus = \Magento\Sales\Model\Order::STATE_PROCESSING;
-
-        if ($strPaymentStatus == \Zaver\SDK\Config\PaymentStatus::SETTLED) {
+      if ($strPaymentStatus == \Zaver\SDK\Config\PaymentStatus::SETTLED) {
           $setOrderStatus = \Magento\Sales\Model\Order::STATE_COMPLETE;
+          $order->setState($setOrderStatus);
+          $order->setStatus($setOrderStatus);
+          $order->setData('zaver_payment_status', $strPaymentStatus);
+          $order->setData('zaver__status', 1);
+          $order->save();
         }
         elseif ($strPaymentStatus == \Zaver\SDK\Config\PaymentStatus::PENDING) {
           $setOrderStatus = \Magento\Sales\Model\Order::STATE_PROCESSING;
+          $order->setState($setOrderStatus);
+          $order->setStatus($setOrderStatus);
+          
+          $bOrderHasInvoice = $order->hasInvoices();
+
+          if (!$bOrderHasInvoice) {
+            $invoice = $this->_invoiceService->prepareInvoice($order);
+            $invoice->setTransactionId($transactionId);
+            $invoice->setRequestedCaptureCase(\Magento\Sales\Model\Order\Invoice::CAPTURE_ONLINE);
+            $invoice->setState(\Magento\Sales\Model\Order\Invoice::STATE_PAID);
+            $invoice->register();
+
+            $savedTransaction = $this->_dbTransaction->addObject($invoice)->addObject($invoice->getOrder());
+            $savedTransaction->save();
+          }
+          
+          $order->setData('zaver_payment_status', $strPaymentStatus);
+          $order->setData('zaver__status', 1);
+          $order->save();
         }
         elseif ($strPaymentStatus == \Zaver\SDK\Config\PaymentStatus::CANCELLED) {
           $setOrderStatus = \Magento\Sales\Model\Order::STATE_CANCELED;
+          $order->setState($setOrderStatus);
+          $order->setStatus($setOrderStatus);
+          $order->setData('zaver_payment_status', $strPaymentStatus);
+          $order->setData('zaver__status', 1);
+          $order->save();
         }
-        $order->setState($setOrderStatus)
-          ->setStatus($setOrderStatus);
-        $order->setData('zaver_payment_status', $strPaymentStatus);
-        $order->setData('zaver__status', 1);
-        $order->save();
-      }
       elseif ($strPaymentStatus == \Zaver\SDK\Config\PaymentStatus::CANCELLED || $strPaymentStatus == \Zaver\SDK\Config\PaymentStatus::ERROR) {
         // Payment failed
-        $order->setData('zaver_payment_status', $strPaymentStatus);
+        $setOrderStatus = \Magento\Sales\Model\Order::STATE_CANCELED;
+        $order->setState($setOrderStatus)->setStatus($setOrderStatus);
+        $payment->setAdditionalInformation('zaver_payment_status', $strPaymentStatus);
         $order->setData('zaver__status', 0);
         $order->save();
       }

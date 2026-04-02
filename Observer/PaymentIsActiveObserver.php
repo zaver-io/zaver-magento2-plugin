@@ -47,10 +47,18 @@ class PaymentIsActiveObserver implements ObserverInterface
     $method = $event->getMethodInstance();
     $result = $event->getResult();
 
+    if (!in_array($method->getCode(), ['zaver_installments', 'zaver_paylater', 'zaver_banktrans']
+      ))
+      {
+        return;
+      } 
+
     try {
       // Check if the Payment Method Zaver module is enabled
       $isInstallmentsEnabled = $this->_helper->getZVInstallmentsActive();
       $isPayLaterEnabled = $this->_helper->getZVPayLaterActive();
+      $isPaymentlinkEnabled = $this->_helper->getZVPaymentlinkActive();
+      $isBanktransferEnabled = $this->_helper->getZVBanktransferActive();
 
       $quote = $this->_checkoutSession->getQuote();
       $currencyCode = $quote->getStore()->getCurrentCurrencyCode();
@@ -60,9 +68,12 @@ class PaymentIsActiveObserver implements ObserverInterface
       $amount = $quote->getGrandTotal();
       $bisPayment = false;
 
-
+      if (empty($zaverApiKey)) { 
+        $result->setData('is_available', false); 
+        } 
+        
       if ($amount > 0 && ($method->getCode() == 'zaver_installments' ||
-          $method->getCode() == 'zaver_paylater')
+          $method->getCode() == 'zaver_paylater' || $method->getCode() == 'zaver_banktransfer')
       ) {
 
         $oCheckout = new \Zaver\SDK\Checkout($zaverApiKey, $zaverTestMode);
@@ -118,10 +129,31 @@ class PaymentIsActiveObserver implements ObserverInterface
             $result->setData('is_available', false);
           }
         }
+        elseif ($method->getCode() == 'zaver_banktransfer') {
+          if ($isPaymentlinkEnabled && $currencyCode == 'EUR') {
+            if (count($oPaymentRes["paymentMethods"]) > 0) {
+              foreach ($oPaymentRes["paymentMethods"] as $method) {
+                $methodCode = $method["paymentMethod"];
+
+                if ($methodCode == $this->_helper->getZaverBanktransferCode()) {
+                  $bisPayment = true;
+                }
+              }
+            }
+
+            if ($bisPayment) {
+              $result->setData('is_available', true);
+            }
+            else {
+              $result->setData('is_available', false);
+            }
+          }
+          else {
+            $result->setData('is_available', false);
+          }
+        }
       }
-      else {
-        $result->setData('is_available', $method->getIsActive());
-      }
+
     }
     catch
     (\Exception $e) {

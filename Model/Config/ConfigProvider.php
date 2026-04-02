@@ -7,6 +7,7 @@ use Psr\Log\LoggerInterface;
 use Zaver\Payment\Model\Payment;
 use Zaver\SDK\Object\PaymentMethodsRequest;
 use Zaver\SDK\Checkout;
+use Exception; 
 
 class ConfigProvider implements ConfigProviderInterface
 {
@@ -49,7 +50,9 @@ class ConfigProvider implements ConfigProviderInterface
    */
   protected $allZaverPayMethods = [
     \Zaver\Payment\Model\Paylater::METHOD_CODE,
-    \Zaver\Payment\Model\Installments::METHOD_CODE
+    \Zaver\Payment\Model\Installments::METHOD_CODE,
+    \Zaver\Payment\Model\Paymentlink::METHOD_CODE,
+    \Zaver\Payment\Model\Banktransfer::METHOD_CODE
   ];
 
   /**
@@ -78,14 +81,21 @@ class ConfigProvider implements ConfigProviderInterface
   public function getConfig() {
     $strpaylaterTitle = 'Rechnung';
     $strinstallmentsTitle = 'Ratenzahlung';
+    $strpaymentlinkTitle = 'Zahlungslink';
+    $strbanktransferTitle = 'Direktüberweisung';
     $strpaylaterLogoSrc = 'https://cdn.zaver.com/DE/paymentmethod/icon-pay-later.svg';
     $strinstallmentsLogoSrc = 'https://cdn.zaver.com/DE/paymentmethod/icon-installments.svg';
+    $strbanktransferLogoSrc = 'https://cdn.zaver.com/DE/paymentmethod/icon-bank-transfer.svg';
 
     try {
       $zaverApiKey = $this->zvDataHelper->getZVApiKey();
       $zaverTestMode = $this->zvDataHelper->getZVTestMode();
       $languageCode = 'EUR';
 
+      if (!$zaverApiKey) { 
+        return []; 
+        } 
+        
       $amount = $this->checkoutSession->getQuote()->getGrandTotal();
 
       $oCheckout = new \Zaver\SDK\Checkout($zaverApiKey, $zaverTestMode);
@@ -106,6 +116,12 @@ class ConfigProvider implements ConfigProviderInterface
             $strinstallmentsLogoSrc = $method["iconSvgSrc"];
             $strinstallmentsTitle = $method["title"];
           }
+          if ($method["paymentMethod"] == $this->zvDataHelper->getZaverPaymentlinkCode()) {
+            $strpaymentlinkTitle = $method["title"];
+          }
+          if ($method["paymentMethod"] == $this->zvDataHelper->getZaverBanktransferCode()) {
+            $strpaymentlinkTitle = $method["title"];
+          }
         }
       }
     }
@@ -117,12 +133,17 @@ class ConfigProvider implements ConfigProviderInterface
         'zaver' => [
           'paylaterTitle' => $strpaylaterTitle,
           'installmentsTitle' => $strinstallmentsTitle,
+          'paymentlinkTitle' => $strpaymentlinkTitle,
+          'banktransferTitle' => $strbanktransferTitle,
           'paylaterLogoSrc' => $strpaylaterLogoSrc,
           'installmentsLogoSrc' => $strinstallmentsLogoSrc,
+          'banktransferLogoSrc' => $strbanktransferLogoSrc,
           'paylaterDesc' => 'Spater bezahlen',
-          'installmentsDesc' => 'Zahlen Sie in Ihrem Tempo'
+          'installmentsDesc' => 'Zahlen Sie in Ihrem Tempo',
+          'banktransferDesc' => 'Überweisen Sie direkt'
         ]
       ]
     ];
   }
+
 }

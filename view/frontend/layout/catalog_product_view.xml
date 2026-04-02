@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Copyright © Magento, Inc. All rights reserved.
+ * See COPYING.txt for license details.
+ */
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <head>
+        <css src="zaver_Payment::css/styles.less"/>
+    </head>
+    <body>
+        <referenceBlock name="product.info.addtocart">
+            <block class="Zaver\Payment\Block\Installment\InstallmentRate" name="zaver.installment.rate" template="Zaver_Payment::installment/ZaverRate.phtml" />
+        </referenceBlock>
+        <referenceBlock name="product.info.addtocart.additional">
+            <block class="Zaver\Payment\Block\Installment\InstallmentRate" name="zaver.installment.rate.additional" template="Zaver_Payment::installment/ZaverRate.phtml" />
+        </referenceBlock>
+    </body>
+</page>

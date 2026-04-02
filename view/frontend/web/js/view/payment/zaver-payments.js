@@ -16,6 +16,10 @@ define(
             {
                 type: 'zaver_installments',
                 component: 'Zaver_Payment/js/view/payment/method-renderer/installments-method'
+            },
+            {
+                type: 'zaver_banktransfer',
+                component: 'Zaver_Payment/js/view/payment/method-renderer/banktransfer-method'
             }
 
         );
