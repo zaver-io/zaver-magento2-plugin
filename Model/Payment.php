@@ -27,8 +27,8 @@ class Payment extends \Magento\Payment\Model\Method\AbstractMethod
     \Magento\Payment\Model\Method\Logger $logger,
     \Magento\Customer\Model\Session $customerSession,
     \Magento\Checkout\Model\Session $checkoutSession,
-    \Magento\Framework\Model\ResourceModel\AbstractResource $resource = null,
-    \Magento\Framework\Data\Collection\AbstractDb $resourceCollection = null,
+    ?\Magento\Framework\Model\ResourceModel\AbstractResource $resource = null,
+    ?\Magento\Framework\Data\Collection\AbstractDb $resourceCollection = null,
     array $data = []
   ) {
     parent::__construct(
@@ -43,7 +43,7 @@ class Payment extends \Magento\Payment\Model\Method\AbstractMethod
       $resourceCollection,
       $data
     );
-    $this->_customerSession = $customerSession;
+    $this->customerSession = $customerSession;
     $this->_checkoutSession = $checkoutSession;
     $this->_code = $this->getCode();
   }
@@ -68,14 +68,27 @@ class Payment extends \Magento\Payment\Model\Method\AbstractMethod
     return $this;
   }
 
+  /**
+   * Online refund ("Refund" on a credit memo): refunds at Zaver before Magento saves the credit memo, so a refund
+   * Zaver rejects stops it. The Zaver refund id becomes the credit memo's refund transaction.
+   * "Refund Offline" does not call this and leaves Zaver alone.
+   */
   public function refund(\Magento\Payment\Model\InfoInterface $payment, $amount) {
     if (!$this->canRefund()) {
       throw new \Magento\Framework\Exception\LocalizedException(__('The refund action is not available .'));
     }
+
+    $refundId = \Magento\Framework\App\ObjectManager::getInstance()
+      ->get(\Zaver\Payment\Model\RefundService::class)
+      ->refund($payment, $amount);
+
+    $payment->setTransactionId($refundId)
+      ->setIsTransactionClosed(true);
+
     return $this;
   }
 
-  public function isAvailable(\Magento\Quote\Api\Data\CartInterface $quote = null) {
+  public function isAvailable(?\Magento\Quote\Api\Data\CartInterface $quote = null) {
     return parent::isAvailable($quote);
   }
 }

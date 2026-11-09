@@ -23,12 +23,7 @@
                                                                         Zaver_Payment/js/view/payment/zaver-payments
                                                                     </item>
                                                                     <item name="methods" xsi:type="array">
-                                                                        <item name="zaver_paylater" xsi:type="array">
-                                                                            <item name="isBillingAddressRequired"
-                                                                                  xsi:type="boolean">true
-                                                                            </item>
-                                                                        </item>
-                                                                        <item name="zaver_installments" xsi:type="array">
+                                                                        <item name="zaver_checkout" xsi:type="array">
                                                                             <item name="isBillingAddressRequired"
                                                                                   xsi:type="boolean">true
                                                                             </item>

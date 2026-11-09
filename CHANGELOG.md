@@ -1,0 +1,29 @@
+# 2.0.0
+- Uses the Zaver PHP SDK 3.1 and Zaver API v2 (`api.zaver.com`); requires `zaver/sdk` ^3.1 instead of `dev-main`
+- Requires Magento 2.4.4 or later (`magento/framework` ^103.0.4): the SDK needs Guzzle 7, which Magento ships from 2.4.4. Tested with Magento 2.4.8 on PHP 8.3; no PHP 8.4 deprecation notices (explicitly nullable parameters in the payment method)
+- Shipping captures exactly the shipped items (and the shipping costs with the first shipment) at Zaver and creates a paid invoice for them with its own capture transaction, so an order shipped in parts gets one paid invoice per capture: Magento's invoices add up to what Zaver captured, each can be refunded online, and Magento completes the order once everything is shipped. Previously the first capture created one invoice for the whole order, left open after a partial capture, which blocked refunds and was never paid by later captures
+- Captures send line items with the real tax (shipping was sent with a fixed tax of 1) and only while the payment awaits capture; otherwise the shipment is saved without an invoice and the merchant sees why
+- One Magento payment method "Zaver" (`zaver_checkout`, configured under Payment Methods > Zaver > Payment method) replaces "Pay later" and "Instalments": its checkout form lists every Zaver payment method the Zaver API offers for the cart (e.g. Pay later, Instalments, Bank transfer, and each variant such as 14/30/90 days), the customer picks one and is sent to that method's payment link. The chosen method is shown with the order in the admin, the customer account and emails. New Zaver payment methods appear without a module update
+- `zaver_paylater` and `zaver_installments` stay installed for orders placed with earlier versions (order view, capture, refund) but are no longer offered in the checkout; enable "Zaver" after updating
+- Refunds: "Refund" on a credit memo refunds at Zaver before the credit memo is saved, so a refund Zaver rejects (e.g. more than the captured amount) stops the credit memo and shows Zaver's reason; "Refund Offline" no longer contacts Zaver. Previously a credit memo was refunded at Zaver after it was saved, only while the "Instalments" method was enabled, and a rejected refund left a credit memo without a refund
+- Refunds send the credit memo's items and shipping with their real tax (was a fixed 1); a credit memo with an adjustment refund or fee is refunded as a fixed amount. The Zaver refund id is the credit memo's refund transaction
+- The refund callback notes a paid-out or cancelled Zaver refund in the order comments (it did nothing before)
+- Capturing, refunding or creating a payment no longer replaces the payment's stored details with the transaction details
+- Zaver payment statuses move orders that still wait for the payment: `PENDING_CONFIRMATION` (e.g. a bank transfer that has not arrived yet) puts the order into Payment Review, where it cannot be invoiced or shipped and is not canceled by Magento's pending order cleanup; a later status accepts it (`PENDING_MERCHANT_CAPTURE` => Processing, `SETTLED` => Complete) or denies it (`CANCELLED`, `ERROR` => Canceled). Every change is noted in the order comments. Previously every status other than these three put a pending order into Processing, and only the first callback counted
+- Orders in Payment Review can be canceled by the merchant, which cancels the Zaver payment too
+- Returning to the shop after paying applies the Zaver payment status like a callback, so the order does not wait for a late callback; the status is asked from Zaver for the order of the customer's checkout session
+- "Refresh Zaver status" on the admin order view asks Zaver for the payment status and applies it, for when a callback is late or cannot reach the shop
+- When the Zaver payment cannot be cancelled, canceling the order fails with a message instead of leaving an open Zaver payment behind a canceled order
+- Cancelling an order cancels its Zaver payment through the API v2 cancel operation
+- Billing and shipping addresses are sent as address lines, which API v2 requires (street name and house number were filled from the two Magento street lines, so an address without a second line was rejected)
+- The Zaver market follows the country of the billing address instead of always being DE; before a billing address is entered no market is sent and Zaver is asked by currency only, with the English texts: the checkout offers exactly the Zaver payment methods Zaver returns for that market, currency and amount, and the payment is created for that market
+- Title, description and icon of the payment methods come from Zaver's localization for the market (e.g. "de-DE" for DE, an English one without a market) and update in the payment step when the address changes; the description is shown when a method is selected. The hardcoded German fallback texts are gone
+- Other payment methods are no longer switched off by the Zaver module's availability check
+- The payer's given name, family name and phone number (as entered in the billing address) are sent to Zaver, so Zaver's checkout starts with the phone number filled in
+- The payment method icons from Zaver's CDN show in the checkout again: `cdn.zaver.com` is allowed for images in Magento's Content Security Policy, which the checkout enforces since Magento 2.4.7
+- PHP 8.2+ compatibility: no more dynamically created properties, which made creating a shipment, a credit memo or downloading the Zaver log fail when Magento runs in developer mode (and logged deprecation notices in production)
+- Fixed "headers already sent" errors on REST calls and Zaver callbacks caused by a blank line before `<?php` in `registration.php`
+- The "Host URL" setting is not used; the SDK picks the Zaver endpoint from the test mode setting
+
+# 1.0.0
+- Initial release

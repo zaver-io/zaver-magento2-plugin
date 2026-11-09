@@ -10,12 +10,8 @@ define(
         rendererList.push(
 
             {
-                type: 'zaver_paylater',
-                component: 'Zaver_Payment/js/view/payment/method-renderer/paylater-method'
-            },
-            {
-                type: 'zaver_installments',
-                component: 'Zaver_Payment/js/view/payment/method-renderer/installments-method'
+                type: 'zaver_checkout',
+                component: 'Zaver_Payment/js/view/payment/method-renderer/zaver-method'
             }
 
         );

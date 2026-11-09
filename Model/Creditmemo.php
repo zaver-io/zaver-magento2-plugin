@@ -7,6 +7,8 @@ use Magento\Framework\Model\AbstractModel;
 class Creditmemo extends AbstractModel
 {
   protected $_logger;
+  protected $_resourceConnection;
+  protected $_authSession;
 
   /**
    * Define resource model

@@ -1,6 +1,6 @@
 # ZAVER PAYMENT MODULE FOR MAGENTO 2
 
-The Zaver payment module is available for Magento 2 version 2.4.5 in the following languages: <b>EN, DE</b>
+The Zaver payment module supports Magento Open Source / Adobe Commerce 2.4.4 and later (PHP 7.4 to 8.4) in the following languages: <b>EN, DE</b>. Earlier Magento versions cannot install it: the Zaver PHP SDK needs Guzzle 7, which Magento ships from 2.4.4.
 
 ## Installation
 
