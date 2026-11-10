@@ -31,38 +31,17 @@ class Index extends \Zaver\Payment\Controller\AbstractCallbackAction implements 
       $api = new \Zaver\SDK\Checkout($dataHelper->getZVApiKey(), $dataHelper->getZVTestMode());
       $strCallBkToken = $dataHelper->getZVCallbackToken();
       $paymentZv = $api->receiveCallback($strCallBkToken);
-      $strPaymentStatus = $paymentZv->getPaymentStatus();
-      $transactionId = $paymentZv->getPaymentId();
-      $capturedAmount = $paymentZv->getCapturedAmount();
 
       $order = $this->getOrderFactory()->create()->loadByIncrementId($orderId);
-      $strOrderStatus = $order->getStatus();
-      $strOrderState = $order->getState();
-
-      if ($strOrderStatus == \Magento\Sales\Model\Order::STATE_PENDING_PAYMENT) {
-        $setOrderStatus = \Magento\Sales\Model\Order::STATE_PROCESSING;
-
-        if ($strPaymentStatus == \Zaver\SDK\Config\PaymentStatus::SETTLED) {
-          $setOrderStatus = \Magento\Sales\Model\Order::STATE_COMPLETE;
-        }
-        elseif ($strPaymentStatus == \Zaver\SDK\Config\PaymentStatus::PENDING) {
-          $setOrderStatus = \Magento\Sales\Model\Order::STATE_PROCESSING;
-        }
-        elseif ($strPaymentStatus == \Zaver\SDK\Config\PaymentStatus::CANCELLED) {
-          $setOrderStatus = \Magento\Sales\Model\Order::STATE_CANCELED;
-        }
-        $order->setState($setOrderStatus)
-          ->setStatus($setOrderStatus);
-        $order->setData('zaver_payment_status', $strPaymentStatus);
-        $order->setData('zaver__status', 1);
-        $order->save();
+      if (!$order->getId()) {
+        $this->getResponse()->setHttpResponseCode(404);
+        return;
       }
-      elseif ($strPaymentStatus == \Zaver\SDK\Config\PaymentStatus::CANCELLED || $strPaymentStatus == \Zaver\SDK\Config\PaymentStatus::ERROR) {
-        // Payment failed
-        $order->setData('zaver_payment_status', $strPaymentStatus);
-        $order->setData('zaver__status', 0);
-        $order->save();
-      }
+
+      // A callback moves an order that still waits for the payment: PENDING_CONFIRMATION puts it into payment
+      // review, a later status accepts (processing / complete) or denies (canceled) it.
+      $this->getObjectManager()->get(\Zaver\Payment\Model\PaymentStatusUpdater::class)
+        ->apply($order, $paymentZv->getPaymentStatus());
 
       $this->getResponse()->setHttpResponseCode(200);
     }

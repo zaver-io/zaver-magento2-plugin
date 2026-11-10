@@ -7,7 +7,6 @@ use Magento\Framework\App\RequestInterface;
 use Psr\Log\LoggerInterface;
 use Magento\Checkout\Model\Session;
 use Zaver\SDK\Checkout;
-use Zaver\SDK\Object\PaymentUpdateRequest;
 use Zaver\SDK\Config\PaymentStatus;
 
 class OrderCancelAfter implements ObserverInterface
@@ -58,20 +57,25 @@ class OrderCancelAfter implements ObserverInterface
 
       // If the order was paid with Zaver
       if (!empty($paymentId)) {
-        $oPaymentUpReq = PaymentUpdateRequest::create()
-          ->setPaymentStatus(PaymentStatus::CANCELLED);
-
         $oCheckout = new \Zaver\SDK\Checkout($zaverApiKey, $zaverTestMode);
         $zvStatusPmRes = $oCheckout->getPaymentStatus($paymentId);
         $zvStatusPm = $zvStatusPmRes->getPaymentStatus();
 
         if ($zvStatusPm != PaymentStatus::SETTLED && $zvStatusPm != PaymentStatus::CANCELLED) {
-          $oPaymentUpRes = $oCheckout->updatePayment($paymentId, $oPaymentUpReq);
+          $oCheckout->cancelPayment($paymentId);
         }
       }
     }
     catch
     (\Exception $e) {
+      // Stop Magento's cancellation (the event fires before the order is saved): a canceled order whose Zaver
+      // payment is still open could get paid, e.g. by a bank transfer that arrives later.
+      $this->_logger->error('Zaver payment could not be cancelled', [
+        'order' => $order->getIncrementId(), 'error' => $e->getMessage()
+      ]);
+      throw new \Magento\Framework\Exception\LocalizedException(
+        __('The Zaver payment could not be cancelled, so the order was not canceled: %1', $e->getMessage())
+      );
     }
   }
 }

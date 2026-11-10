@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<!-- The checkout shows the payment method icons from Zaver's CDN (iconSvgSrc in the payment methods response). -->
+<csp_whitelist xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Csp:etc/csp_whitelist.xsd">
+    <policies>
+        <policy id="img-src">
+            <values>
+                <value id="zaver_cdn" type="host">cdn.zaver.com</value>
+            </values>
+        </policy>
+    </policies>
+</csp_whitelist>

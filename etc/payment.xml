@@ -7,6 +7,9 @@
         </group>
     </groups>
     <methods>
+        <method name="zaver_checkout">
+            <allow_multiple_address>1</allow_multiple_address>
+        </method>
         <method name="zaver_paylater">
             <allow_multiple_address>1</allow_multiple_address>
         </method>

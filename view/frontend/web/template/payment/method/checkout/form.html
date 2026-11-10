@@ -10,6 +10,20 @@
         clear: both;
         display: table;
     }
+
+    .zv-option {
+        margin-bottom: 1.5rem;
+    }
+
+    .zv-image {
+        max-height: 2.5rem;
+    }
+
+    .zv-description {
+        display: block;
+        margin-left: 2.5rem;
+        color: #666;
+    }
 </style>
 <div class="payment-method" data-bind="css: {'_active': (getCode() == isChecked())}">
     <div class="payment-method-title field choice">
@@ -17,11 +31,25 @@
                name="payment[method]"
                class="radio"
                data-bind="attr: {'id': getCode()}, value: getCode(), checked: isChecked, click: selectPaymentMethod, visible: isRadioButtonVisible()"/>
-        <img data-bind="attr: {src: getLogo(), alt: getTitle()}"
-             class="zv-image"/>
         <label data-bind="attr: {'for': getCode()}" class="label"><span data-bind="text: getTitle()"></span></label>
     </div>
     <div class="payment-method-content">
+        <!-- The Zaver payment methods the Zaver API offers for the cart -->
+        <div class="zv-options" data-bind="foreach: options">
+            <div class="zv-option field choice zv-clearfix">
+                <input type="radio"
+                       class="radio"
+                       data-bind="attr: {id: $parent.getCode() + '_' + $index(), name: $parent.getCode() + '_option'},
+                                  checkedValue: $parent.getOptionKey($data),
+                                  checked: $parent.selectedKey,
+                                  click: $parent.selectOption.bind($parent)"/>
+                <img data-bind="attr: {src: logo, alt: title}, visible: logo" class="zv-image"/>
+                <label class="label" data-bind="attr: {for: $parent.getCode() + '_' + $index()}">
+                    <span data-bind="text: title"></span>
+                </label>
+                <span class="zv-description" data-bind="text: description, visible: description"></span>
+            </div>
+        </div>
         <!-- ko foreach: getRegion('messages') -->
         <!-- ko template: getTemplate() --><!-- /ko -->
         <!--/ko-->

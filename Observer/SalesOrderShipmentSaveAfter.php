@@ -11,7 +11,6 @@ use Magento\Sales\Model\OrderRepository;
 use Magento\Catalog\Model\Product\Type as ProductType;
 use Zaver\SDK\Checkout;
 use Zaver\SDK\Object\PaymentCaptureRequest;
-use Zaver\SDK\Object\PaymentCaptureResponse;
 use Zaver\SDK\Config\PaymentStatus;
 use Zaver\SDK\Object\LineItem;
 use Zaver\SDK\Config\ItemType;
@@ -22,6 +21,11 @@ class SalesOrderShipmentSaveAfter implements ObserverInterface
    * @var LoggerInterface
    */
   private $_logger;
+
+  /**
+   * @var \Magento\Framework\Message\ManagerInterface
+   */
+  private $messageManager;
 
   /**
    * @var \Zaver\Payment\Helper\Data
@@ -83,245 +87,210 @@ class SalesOrderShipmentSaveAfter implements ObserverInterface
     $orderId = $order->getIncrementId();
     $shipId = $shipment->getIncrementId();
 
+    $paymentId = (string)$order->getData('zaver_payment_id');
+
+    // Only orders paid with Zaver
+    if ($paymentId === '') {
+      return $this;
+    }
+
     try {
-      // Check if the Payment Method Zaver module is enabled
-      $isInstallmentsEnabled = $this->_helper->getZVInstallmentsActive();
-      $isPayLaterEnabled = $this->_helper->getZVPayLaterActive();
+      $oCheckout = new \Zaver\SDK\Checkout($helper->getZVApiKey(), $helper->getZVTestMode());
+      $zvStatusPm = $oCheckout->getPaymentStatus($paymentId)->getPaymentStatus();
 
-      $zaverApiKey = $helper->getZVApiKey();
-      $zaverTestMode = $helper->getZVTestMode();
-
-      $strOrderStatus = $order->getStatus();
-      $paymentId = $order->getData("zaver_payment_id");
-      $roundPow = pow(10, 0);
-      $amount = $order->getGrandTotal() * $roundPow;
-      $amount = round($amount, 2);
-
-      $strOrderItemsId = $order->getData("zaver_order_items_id");
-      $aZaverOrderItemsIds = array();
-
-      if (!empty($strOrderItemsId)) {
-        $aPieces = explode(';', $strOrderItemsId);
-
-        foreach ($aPieces as $piece) {
-          if (!empty($piece)) {
-            list($key, $value) = explode(':', $piece);
-            $aZaverOrderItemsIds[$key] = $value;
-          }
+      // Only a payment awaiting capture can be captured (API v2 rejects captures in any other status). A settled
+      // payment has nothing left to capture.
+      if ($zvStatusPm != PaymentStatus::PENDING) {
+        if ($zvStatusPm != PaymentStatus::SETTLED) {
+          $this->messageManager->addWarningMessage(
+            __('The Zaver payment cannot be captured yet (status %1), so no invoice was created for this shipment.', $zvStatusPm)
+          );
         }
+        return $this;
       }
 
-      $aProdsShipped = $this->_shipments->getProductsShipped($orderId);
-
-      // If the order was paid with Zaver
-      if (!empty($paymentId)) {
-        /*if ($this->isShippingAllItems($order, $shipment)) {
-          $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: isShippingAllItems() true");
-          $oPaymentCapReq = PaymentCaptureRequest::create()
-            ->setCurrency($order->getOrderCurrencyCode())
-            ->setAmount($amount);
-          $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: oPaymentCapReq:" . print_r($oPaymentCapReq, true));
-
-          $oCheckout = new \Zaver\SDK\Checkout($zaverApiKey, $zaverTestMode);
-          $zvStatusPmRes = $oCheckout->getPaymentStatus($paymentId);
-          $zvStatusPm = $zvStatusPmRes->getPaymentStatus();
-
-          $this->_logger->log(\Psr\Log\LogLevel::INFO, "IN OBSERVER: zvStatusPmRes:" . print_r($zvStatusPmRes, true));
-
-          if ($zvStatusPm != PaymentStatus::SETTLED && $zvStatusPm != PaymentStatus::CANCELLED) {
-            $oCheckout->capturePayment($paymentId, $oPaymentCapReq);
-          }
-        }
-        else {*/
-        $orderHasDiscount = abs($order->getDiscountAmount() ?? 0) > 0;
-        $oPaymentCapReq = PaymentCaptureRequest::create();
-
-        $oCheckout = new \Zaver\SDK\Checkout($zaverApiKey, $zaverTestMode);
-        $zvStatusPmRes = $oCheckout->getPaymentStatus($paymentId);
-        $zvStatusPm = $zvStatusPmRes->getPaymentStatus();
-
-        $totalAmount = 0;
-
-        // Send the shipping to zaver the first time
-        if (count($aProdsShipped) == 0) {
-          $shippingName = $order->getShippingDescription();
-          $shippingVatRate = 1;
-          $shippingVatAmount = 1;
-          $shippingAmountTax = $order->getBaseShippingInclTax() * $roundPow;
-
-          if ($shippingAmountTax > 0) {
-            $shippingAmount = $order->getBaseShippingInclTax() * $roundPow;
-          }
-          else {
-            $shippingAmount = $order->getBaseShippingAmount() * $roundPow;
-          }
-
-          $shippingAmount = round($shippingAmount, 2);
-          $totalAmount += $shippingAmount;
-
-          $item = \Zaver\SDK\Object\LineItem::create()
-            ->setId($aZaverOrderItemsIds[ItemType::SHIPPING])
-            ->setName($shippingName)
-            ->setMerchantReference(ItemType::SHIPPING)
-            ->setQuantity(1)
-            ->setUnitPrice($shippingAmount)
-            ->setTotalAmount($shippingAmount)
-            ->setTaxRatePercent($shippingVatRate)
-            ->setTaxAmount($shippingVatAmount);
-
-          $oPaymentCapReq->addLineItem($item);
-          $this->_shipments->addShippedProducts($orderId, $shipId, ItemType::SHIPPING, 1, $shippingAmount, $aZaverOrderItemsIds[ItemType::SHIPPING]);
-        }
-
-        /** @var \Magento\Sales\Model\Order\Shipment\Item $item */
-        foreach ($shipment->getItemsCollection() as $item) {
-          if (!$item->getQty()) {
-            continue;
-          }
-
-          $orderItemId = $item->getOrderItemId();
-          $orderItem = $item->getOrderItem();
-          $iQty = (int)$item->getQty();
-          $strSku = $orderItem->getSku();
-          $strName = $orderItem->getName();
-          $parentId = $item->getParentId();
-
-          $productPriceTax = $orderItem->getBasePriceInclTax() * $roundPow;
-
-          if ($orderHasDiscount) {
-            if ($productPriceTax > 0) {
-              $rowTotal = $orderItem->getBaseRowTotalInclTax() - $orderItem->getBaseDiscountAmount();
-            }
-            else {
-              $rowTotal = $orderItem->getBasePrice() - $orderItem->getBaseDiscountAmount();
-            }
-
-            $value = (($rowTotal) / $orderItem->getQtyOrdered()) * $item->getQty();
-            $productPrice = $value * $roundPow;
-          }
-          else {
-            if ($productPriceTax > 0) {
-              $productPrice = $orderItem->getBasePriceInclTax() * $roundPow;
-            }
-            else {
-              $productPrice = $orderItem->getBasePrice() * $roundPow;
-            }
-          }
-
-          $productPrice = round($productPrice, 2);
-          $iPrice = round($productPrice, 2);
-          $iPriceTax = $orderItem->getTaxAmount() * $roundPow;
-          $iVatRate = $orderItem->getTaxPercent();
-
-          $totalAmount += $iQty * $iPrice;
-
-          $item = \Zaver\SDK\Object\LineItem::create()
-            ->setId($aZaverOrderItemsIds[$orderItemId])
-            ->setName($strName)
-            ->setMerchantReference($strSku)
-            ->setQuantity($iQty)
-            ->setUnitPrice($iPrice)
-            ->setTotalAmount($iQty * $iPrice)
-            ->setTaxRatePercent($iVatRate)
-            ->setTaxAmount($iPriceTax);
-          $oPaymentCapReq->addLineItem($item);
-          $this->_shipments->addShippedProducts($orderId, $shipId, $orderItemId, $iQty, $iPrice, $aZaverOrderItemsIds[$orderItemId]);
-        }
-
-        $oPaymentCapReq->setCurrency($order->getOrderCurrencyCode())
-          ->setAmount($totalAmount);
-
-        if ($zvStatusPm != PaymentStatus::SETTLED && $zvStatusPm != PaymentStatus::CANCELLED) {
-          $captureResp = $oCheckout->capturePayment($paymentId, $oPaymentCapReq);
-          $resCaptureStatus = $captureResp->getPaymentStatus();
-          $capturedAmount = $captureResp->getAmount();
-          $captureTransactionId = $captureResp->getPaymentCaptureId();
-
-          if ($resCaptureStatus == $helper::ZAVER_CAPTURE_STATUS_PENDING ||
-            $resCaptureStatus == $helper::ZAVER_CAPTURE_STATUS_FULLY
-          ) {
-            // Successfull capture in Zaver
-            $bOrderHasInvoice = $order->hasInvoices();
-
-            if ($capturedAmount > 0) {
-              if (!empty($captureTransactionId)) {
-                $transactionId = $captureTransactionId;
-              } else {
-                $transactionId = $this->_shipments->getNextTransaction($orderId, $paymentId,
-                  \Magento\Sales\Model\Order\Payment\Transaction::TYPE_CAPTURE);
-              }
-
-              $paymentData = array("id" => $transactionId, "capturedAmount" => $capturedAmount,
-                "paymentStatus" => $resCaptureStatus, "parentid" => $paymentId);
-
-              if ($resCaptureStatus == $helper::ZAVER_CAPTURE_STATUS_FULLY) {
-                $this->_shipments->setProductsCapture($transactionId, $shipId);
-
-                $this->createTransaction($order, $paymentData, true);
-
-                if (!$bOrderHasInvoice) {
-                  $invoice = $this->_invoiceService->prepareInvoice($order);
-                  $invoice->setTransactionId($transactionId);
-                  $invoice->setRequestedCaptureCase(\Magento\Sales\Model\Order\Invoice::CAPTURE_ONLINE);
-                  $invoice->setState(\Magento\Sales\Model\Order\Invoice::STATE_PAID);
-                  $invoice->register();
-
-                  $savedTransaction = $this->_dbTransaction->addObject($invoice)->addObject($invoice->getOrder());
-                  $savedTransaction->save();
-                }
-
-                if ($strOrderStatus != \Magento\Sales\Model\Order::STATE_COMPLETE) {
-                  $order->setState(\Magento\Sales\Model\Order::STATE_COMPLETE)
-                    ->setStatus(\Magento\Sales\Model\Order::STATE_COMPLETE);
-                }
-
-                // Payment success
-                $order->setData('zaver__status', 1);
-                $order->save();
-              }
-              elseif ($resCaptureStatus == $helper::ZAVER_CAPTURE_STATUS_PENDING) {
-                $this->_shipments->setProductsCapture($transactionId, $shipId);
-
-                $this->createTransaction($order, $paymentData, false);
-
-                if (!$bOrderHasInvoice) {
-                  $invoice = $this->_invoiceService->prepareInvoice($order);
-                  $invoice->setTransactionId($transactionId);
-                  $invoice->setRequestedCaptureCase(\Magento\Sales\Model\Order\Invoice::CAPTURE_ONLINE);
-                  $invoice->setState(\Magento\Sales\Model\Order\Invoice::STATE_OPEN);
-                  $invoice->register();
-
-                  $savedTransaction = $this->_dbTransaction->addObject($invoice)->addObject($invoice->getOrder());
-                  $savedTransaction->save();
-                }
-
-                if ($strOrderStatus == \Magento\Sales\Model\Order::STATE_PENDING_PAYMENT) {
-                  $order->setState(\Magento\Sales\Model\Order::STATE_PROCESSING)
-                    ->setStatus(\Magento\Sales\Model\Order::STATE_PROCESSING);
-                }
-
-                // Payment success
-                $order->setData('zaver__status', 1);
-                $order->save();
-              }
-            }
-          }
-          else {
-            $this->messageManager->addWarningMessage(
-              __('The shipment can not been processed. Please try again later.')
-            );
-            return $this;
-          }
-        }
+      // Every capture gets its own paid invoice for exactly the shipped items (Magento adds the shipping costs to the
+      // first invoice), so Magento's invoices add up to what Zaver captured and each can be refunded online.
+      $invoice = $this->prepareShipmentInvoice($order, $shipment);
+      if (!$invoice || $invoice->getBaseGrandTotal() <= 0) {
+        return $this;
       }
+
+      $totalAmount = round((float)$invoice->getBaseGrandTotal(), 2);
+      $oPaymentCapReq = PaymentCaptureRequest::create()
+        ->setCurrency($order->getOrderCurrencyCode())
+        ->setAmount($totalAmount);
+
+      // Line items when they add up to the invoice; otherwise (e.g. bundles) Zaver captures the amount alone.
+      $lineItems = $this->getCaptureLineItems($invoice, $this->getZaverLineItemIds($order));
+      foreach ($lineItems ?? [] as $lineItem) {
+        $oPaymentCapReq->addLineItem($lineItem);
+      }
+
+      // API v2 answers a capture with the payment status: SETTLED once the whole amount is captured,
+      // still PENDING_MERCHANT_CAPTURE after a partial capture. It returns no capture id.
+      $captureResp = $oCheckout->capturePayment($paymentId, $oPaymentCapReq);
+      $resCaptureStatus = $captureResp->getPaymentStatus();
+
+      if (($resCaptureStatus != PaymentStatus::SETTLED && $resCaptureStatus != PaymentStatus::PENDING)
+        || $captureResp->getCapturedAmount() <= 0) {
+        $this->messageManager->addWarningMessage(
+          __('Zaver did not capture the payment (status %1), so no invoice was created for this shipment.', $resCaptureStatus)
+        );
+        return $this;
+      }
+
+      // One transaction id per capture; the authorization already uses the payment id itself.
+      $transactionId = $paymentId . '-capture-' . ($order->getInvoiceCollection()->getSize() + 1);
+
+      // Captured at Zaver already: register the invoice as paid without calling the payment method again.
+      $invoice->setTransactionId($transactionId);
+      $invoice->setRequestedCaptureCase(\Magento\Sales\Model\Order\Invoice::CAPTURE_OFFLINE);
+      $invoice->register();
+
+      if (in_array($order->getState(), [\Magento\Sales\Model\Order::STATE_NEW,
+        \Magento\Sales\Model\Order::STATE_PENDING_PAYMENT, \Magento\Sales\Model\Order::STATE_PAYMENT_REVIEW], true)) {
+        $order->setState(\Magento\Sales\Model\Order::STATE_PROCESSING)
+          ->setStatus($order->getConfig()->getStateDefaultStatus(\Magento\Sales\Model\Order::STATE_PROCESSING));
+      }
+      $order->setData('zaver__status', 1);
+
+      // Magento completes the order on save once everything is shipped and invoiced.
+      $this->_dbTransaction->addObject($invoice)->addObject($order)->save();
+
+      // The capture transaction the invoice refers to; online refunds of the invoice use it as their parent.
+      $this->createTransaction($order, array("id" => $transactionId, "capturedAmount" => $totalAmount,
+        "paymentStatus" => $resCaptureStatus, "parentid" => $paymentId), true);
     }
     catch
     (\Exception $e) {
       $this->messageManager->addWarningMessage(
         __($e->getMessage())
       );
-      return $this;
     }
+
+    return $this;
+  }
+
+  /**
+   * An invoice for the shipment's quantities, or null when nothing in it can be invoiced (e.g. already invoiced).
+   *
+   * @param Order $order
+   * @param Order\Shipment $shipment
+   * @return \Magento\Sales\Model\Order\Invoice|null
+   */
+  private function prepareShipmentInvoice(Order $order, Order\Shipment $shipment) {
+    $qtys = [];
+
+    /** @var \Magento\Sales\Model\Order\Shipment\Item $item */
+    foreach ($shipment->getItemsCollection() as $item) {
+      $orderItem = $item->getOrderItem();
+      $qty = min((float)$item->getQty(), (float)$orderItem->getQtyToInvoice());
+
+      if ($qty > 0) {
+        $qtys[$item->getOrderItemId()] = $qty;
+      }
+    }
+
+    // An empty list would make Magento invoice the whole order.
+    if (empty($qtys) || !$order->canInvoice()) {
+      return null;
+    }
+
+    $invoice = $this->_invoiceService->prepareInvoice($order, $qtys);
+
+    return $invoice->getTotalQty() > 0 ? $invoice : null;
+  }
+
+  /**
+   * Zaver line items for the invoice's items and shipping, or null when they do not add up to the invoice total
+   * (e.g. bundles, or an item Zaver does not know); Zaver then captures the amount alone.
+   *
+   * @param \Magento\Sales\Model\Order\Invoice $invoice
+   * @param array $zaverIds
+   * @return \Zaver\SDK\Object\LineItem[]|null
+   */
+  private function getCaptureLineItems($invoice, array $zaverIds) {
+    $lineItems = [];
+    $total = 0.0;
+
+    /** @var \Magento\Sales\Model\Order\Invoice\Item $item */
+    foreach ($invoice->getAllItems() as $item) {
+      $orderItem = $item->getOrderItem();
+      $qty = (int)$item->getQty();
+
+      // Children of configurable products are priced on their parent's invoice item.
+      if ($qty <= 0 || $orderItem->getParentItem()) {
+        continue;
+      }
+
+      // The payment keeps configurable products under their child (simple) item.
+      $zaverId = $zaverIds[$orderItem->getItemId()] ?? null;
+      foreach ($orderItem->getChildrenItems() ?: [] as $childItem) {
+        $zaverId = $zaverId ?? ($zaverIds[$childItem->getItemId()] ?? null);
+      }
+
+      if ($zaverId === null) {
+        return null;
+      }
+
+      $rowTotal = round((float)$item->getBaseRowTotalInclTax() - (float)$item->getBaseDiscountAmount(), 2);
+      $lineItems[] = \Zaver\SDK\Object\LineItem::create()
+        ->setId($zaverId)
+        ->setName((string)$orderItem->getName())
+        ->setMerchantReference((string)$orderItem->getSku())
+        ->setQuantity($qty)
+        ->setUnitPrice(round($rowTotal / $qty, 2))
+        ->setTotalAmount($rowTotal)
+        ->setTaxRatePercent((float)$orderItem->getTaxPercent())
+        ->setTaxAmount(round((float)$item->getBaseTaxAmount(), 2));
+      $total += $rowTotal;
+    }
+
+    $shipping = round((float)$invoice->getBaseShippingInclTax(), 2);
+    if ($shipping > 0) {
+      if (!isset($zaverIds[ItemType::SHIPPING])) {
+        return null;
+      }
+
+      $shippingTax = round((float)$invoice->getBaseShippingTaxAmount(), 2);
+      $lineItems[] = \Zaver\SDK\Object\LineItem::create()
+        ->setId($zaverIds[ItemType::SHIPPING])
+        ->setName((string)$invoice->getOrder()->getShippingDescription())
+        ->setMerchantReference(ItemType::SHIPPING)
+        ->setQuantity(1)
+        ->setUnitPrice($shipping)
+        ->setTotalAmount($shipping)
+        ->setTaxRatePercent($shipping > $shippingTax && $shippingTax > 0
+          ? round($shippingTax / ($shipping - $shippingTax) * 100, 2) : 0.0)
+        ->setTaxAmount($shippingTax);
+      $total += $shipping;
+    }
+
+    if (empty($lineItems) || abs($total - round((float)$invoice->getBaseGrandTotal(), 2)) > 0.01) {
+      return null;
+    }
+
+    return $lineItems;
+  }
+
+  /**
+   * Magento order item id (and "SHIPPING") => Zaver line item id, stored on the order when the payment was created.
+   *
+   * @param Order $order
+   * @return array
+   */
+  private function getZaverLineItemIds(Order $order) {
+    $ids = [];
+
+    foreach (explode(';', (string)$order->getData('zaver_order_items_id')) as $piece) {
+      if (strpos($piece, ':') !== false) {
+        list($key, $value) = explode(':', $piece, 2);
+        $ids[$key] = $value;
+      }
+    }
+
+    return $ids;
   }
 
   /**
@@ -414,8 +383,9 @@ class SalesOrderShipmentSaveAfter implements ObserverInterface
       $payment->setTransactionId($paymentData['id']);
       $payment->setIsTransactionClosed($bTranClosed);
       $payment->setParentTransactionId($paymentData['parentid']);
+      // Only this key: the whole array would replace the chosen Zaver payment method stored on the payment.
       $payment->setAdditionalInformation(
-        [\Magento\Sales\Model\Order\Payment\Transaction::RAW_DETAILS => (array)$paymentData]
+        \Magento\Sales\Model\Order\Payment\Transaction::RAW_DETAILS, (array)$paymentData
       );
       $formatedPrice = $order->getBaseCurrency()->formatTxt(
         $paymentData["capturedAmount"]

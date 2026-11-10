@@ -3,12 +3,7 @@
 namespace Zaver\Payment\Observer;
 
 use Magento\Framework\Event\ObserverInterface;
-use Magento\Framework\App\RequestInterface;
 use Psr\Log\LoggerInterface;
-use Magento\Checkout\Model\Session;
-use Zaver\Payment\Model\Payment;
-use Zaver\SDK\Object\PaymentMethodsRequest;
-use Zaver\SDK\Checkout;
 
 class PaymentIsActiveObserver implements ObserverInterface
 {
@@ -25,106 +20,42 @@ class PaymentIsActiveObserver implements ObserverInterface
   protected $_checkoutSession;
 
   /**
-   * @var \Zaver\Payment\Helper\Data
+   * @var \Zaver\Payment\Model\PaymentMethods
    */
-  public $_helper;
+  private $_paymentMethods;
 
   public function __construct(\Psr\Log\LoggerInterface $logger,
                               \Magento\Checkout\Model\Session $checkoutSession,
-                              \Zaver\Payment\Helper\Data $data) {
+                              \Zaver\Payment\Model\PaymentMethods $paymentMethods) {
     $this->_logger = $logger;
     $this->_checkoutSession = $checkoutSession;
-    $this->_helper = $data;
+    $this->_paymentMethods = $paymentMethods;
   }
 
   /**
-   * Active only for zaver payment methods
+   * The Zaver payment method is available when Zaver offers at least one payment method for the cart's market,
+   * currency and amount. Other payment methods are left alone.
    *
    * @param \Magento\Framework\Event\Observer $observer
    */
   public function execute(\Magento\Framework\Event\Observer $observer) {
     $event = $observer->getEvent();
-    $method = $event->getMethodInstance();
     $result = $event->getResult();
 
+    if ($event->getMethodInstance()->getCode() != \Zaver\Payment\Model\Checkout::METHOD_CODE || !$result->getData('is_available')) {
+      return;
+    }
+
     try {
-      // Check if the Payment Method Zaver module is enabled
-      $isInstallmentsEnabled = $this->_helper->getZVInstallmentsActive();
-      $isPayLaterEnabled = $this->_helper->getZVPayLaterActive();
+      // The event carries the cart for REST and GraphQL checkouts too, where there is no checkout session.
+      $quote = $event->getQuote() ?: $this->_checkoutSession->getQuote();
 
-      $quote = $this->_checkoutSession->getQuote();
-      $currencyCode = $quote->getStore()->getCurrentCurrencyCode();
-
-      $zaverApiKey = $this->_helper->getZVApiKey();
-      $zaverTestMode = $this->_helper->getZVTestMode();
-      $amount = $quote->getGrandTotal();
-      $bisPayment = false;
-
-
-      if ($amount > 0 && ($method->getCode() == 'zaver_installments' ||
-          $method->getCode() == 'zaver_paylater')
-      ) {
-
-        $oCheckout = new \Zaver\SDK\Checkout($zaverApiKey, $zaverTestMode);
-        $oPaymentReq = PaymentMethodsRequest::create()
-          ->setCurrency($currencyCode)
-          ->setAmount($amount);
-
-        $oPaymentRes = $oCheckout->getPaymentMethods($oPaymentReq);
-
-        if ($method->getCode() == 'zaver_installments') {
-          if ($isInstallmentsEnabled && $currencyCode == 'EUR') {
-            if (count($oPaymentRes["paymentMethods"]) > 0) {
-              foreach ($oPaymentRes["paymentMethods"] as $method) {
-                $methodCode = $method["paymentMethod"];
-
-                if ($methodCode == $this->_helper->getZaverInstallmentsCode()) {
-                  $bisPayment = true;
-                }
-              }
-            }
-
-            if ($bisPayment) {
-              $result->setData('is_available', true);
-            }
-            else {
-              $result->setData('is_available', false);
-            }
-          }
-          else {
-            $result->setData('is_available', false);
-          }
-        }
-        elseif ($method->getCode() == 'zaver_paylater') {
-          if ($isPayLaterEnabled && $currencyCode == 'EUR') {
-            if (count($oPaymentRes["paymentMethods"]) > 0) {
-              foreach ($oPaymentRes["paymentMethods"] as $method) {
-                $methodCode = $method["paymentMethod"];
-
-                if ($methodCode == $this->_helper->getZaverPayLaterCode()) {
-                  $bisPayment = true;
-                }
-              }
-            }
-
-            if ($bisPayment) {
-              $result->setData('is_available', true);
-            }
-            else {
-              $result->setData('is_available', false);
-            }
-          }
-          else {
-            $result->setData('is_available', false);
-          }
-        }
-      }
-      else {
-        $result->setData('is_available', $method->getIsActive());
-      }
+      $result->setData('is_available', !empty($this->_paymentMethods->getOffered($quote)));
     }
     catch
     (\Exception $e) {
+      $this->_logger->warning('Zaver payment method availability could not be checked', ['error' => $e->getMessage()]);
+      $result->setData('is_available', false);
     }
   }
 }

@@ -111,7 +111,7 @@ class Index extends \Zaver\Payment\Controller\AbstractCheckoutAction
               ->setTaxRatePercent($iVatRate)
               ->setTaxAmount($iPriceTax)
               ->setItemType($itemType)
-              ->setMerchantMetadata(array("itemId" => $itemId));
+              ->setLineItemMetadata(array("itemId" => $itemId));
 
             $aZaverItems[$itemId] = $item;
 
@@ -146,7 +146,7 @@ class Index extends \Zaver\Payment\Controller\AbstractCheckoutAction
               ->setTaxRatePercent($iVatRate)
               ->setTaxAmount($iPriceTax)
               ->setItemType($itemType)
-              ->setMerchantMetadata(array("itemId" => $item->getItemId()));
+              ->setLineItemMetadata(array("itemId" => $item->getItemId()));
 
             $aZaverItems[$itemId] = $item;
           }
@@ -171,66 +171,48 @@ class Index extends \Zaver\Payment\Controller\AbstractCheckoutAction
           ->setEmail($order->getCustomerEmail());
 
 
+        // API v2 needs either addressLine1 or streetName plus houseNumber; Magento keeps the whole street
+        // (name and number) in its street lines, so they map to the address lines.
         if (!empty($order->getBillingAddress())) {
-          $strAddress1 = $order->getBillingAddress()->getStreetLine(1);
-          $strAddress2 = "";
-          if (!empty($order->getBillingAddress()->getStreetLine(2))) {
-            $strAddress2 = " " . $order->getBillingAddress()->getStreetLine(2);
-          }
-
-          $strPostcode = $order->getBillingAddress()->getPostcode();
-          $strCity = $order->getBillingAddress()->getCity();
-          $strCountry = $order->getBillingAddress()->getCountryId();
-
-          $billAdrName = $order->getBillingAddress()->getFirstname() . " " . $order->getBillingAddress()->getLastname();
-
-          $billAdress = \Zaver\SDK\Object\Address::create()
-            ->setName($billAdrName)
-            ->setPostalCode($strPostcode)
-            ->setStreetName($strAddress1)
-            ->setHouseNumber($strAddress2)
-            ->setCity($strCity)
-            ->setCountry($strCountry);
-
+          $billingAddress = $order->getBillingAddress();
+          $billAdress = $this->createZaverAddress($billingAddress);
           $payer->setBillingAddress($billAdress);
+
+          // The payer's name and phone number come from the billing address; the phone number is sent as entered.
+          if (!empty($billingAddress->getFirstname())) {
+            $payer->setGivenName($billingAddress->getFirstname());
+          }
+          if (!empty($billingAddress->getLastname())) {
+            $payer->setFamilyName($billingAddress->getLastname());
+          }
+          if (!empty($billingAddress->getTelephone())) {
+            $payer->setPhoneNumber($billingAddress->getTelephone());
+          }
         }
 
         if (!empty($order->getShippingAddress())) {
-          $shipAddressAddress1 = $order->getShippingAddress()->getStreetLine(1);
-          $shipAddressAddress2 = "";
-
-          if (!empty($order->getShippingAddress()->getStreetLine(2))) {
-            $shipAddressAddress2 = " " . $order->getShippingAddress()->getStreetLine(2);
-          }
-
-          $shipAddressPostcode = $order->getShippingAddress()->getPostcode();
-          $shipAddressCity = $order->getShippingAddress()->getCity();
-          $shipAddressCountry = $order->getShippingAddress()->getCountryId();
-
-          $shippAdrName = $order->getShippingAddress()->getFirstname() . " " . $order->getShippingAddress()->getLastname();
-
-          $shippAdress = \Zaver\SDK\Object\Address::create()
-            ->setName($shippAdrName)
-            ->setPostalCode($shipAddressPostcode)
-            ->setStreetName($shipAddressAddress1)
-            ->setHouseNumber($shipAddressAddress2)
-            ->setCity($shipAddressCity)
-            ->setCountry($shipAddressCountry);
-
+          $shippAdress = $this->createZaverAddress($order->getShippingAddress());
           $payer->setShippingAddress($shippAdress);
         }
 
         $paymentTitle = "Order #" . $orderId;
 
+        // The same market the checkout offered the payment methods for: the country of the billing address.
+        $market = $this->getObjectManager()->get(\Zaver\Payment\Model\PaymentMethods::class)->getMarket($order);
+
         $request = \Zaver\SDK\Object\PaymentCreationRequest::create()
           ->setMerchantPaymentReference($orderId)
           ->setAmount($amount)
           ->setCurrency($orderCurrencyCode)
-          ->setMarket('DE')
           ->setTitle($paymentTitle)
           ->setMerchantUrls($urls)
           ->setPayerData($payer)
           ->addLineItem($shipping);
+
+        // An order without a billing country has no market, like the checkout before an address is entered.
+        if ($market !== null) {
+          $request->setMarket($market);
+        }
 
         if (!empty($aZaverItems)) {
           foreach ($aZaverItems as $oItem) {
@@ -242,14 +224,32 @@ class Index extends \Zaver\Payment\Controller\AbstractCheckoutAction
 
         if ($payment->getPaymentStatus() == \Zaver\SDK\Config\PaymentStatus::CREATED) {
           $strUrlRedirect = $payment->getPaymentLink();
-          $paymentsData = $payment->getSpecificPaymentMethodData();
-          $paymentSel = $helper->getZaverMethodCode($paymentMethodCode);
+          $paymentsData = $payment->getSpecificPaymentMethodData() ?? [];
           $paymentZvId = $payment->getPaymentId();
 
+          // The link of the Zaver payment method (and variant) the customer chose in the checkout; the link of
+          // the same method in another variant is the fallback, the general payment link the last resort.
+          $orderPayment = $order->getPayment();
+          $paymentSel = (string)$orderPayment->getAdditionalInformation(\Zaver\Payment\Model\Checkout::KEY_ZAVER_METHOD);
+          $variantSel = (string)$orderPayment->getAdditionalInformation(\Zaver\Payment\Model\Checkout::KEY_ZAVER_VARIANT);
+          $sameMethodLink = null;
+
           foreach ($paymentsData as $oPayment) {
-            if ($paymentSel == $oPayment["paymentMethod"]) {
-              $strUrlRedirect = $oPayment["paymentLink"];
+            if ($paymentSel === '' || $paymentSel != $oPayment["paymentMethod"]) {
+              continue;
             }
+
+            if ($variantSel === (string)($oPayment["paymentMethodVariant"] ?? '')) {
+              $sameMethodLink = null;
+              $strUrlRedirect = $oPayment["paymentLink"];
+              break;
+            }
+
+            $sameMethodLink = $sameMethodLink ?? $oPayment["paymentLink"];
+          }
+
+          if ($sameMethodLink !== null) {
+            $strUrlRedirect = $sameMethodLink;
           }
 
           // Add the zaver payment id
@@ -317,8 +317,9 @@ class Index extends \Zaver\Payment\Controller\AbstractCheckoutAction
       $payment->setLastTransId($paymentData['id']);
       $payment->setTransactionId($paymentData['id']);
       $payment->setIsTransactionClosed($bTranClosed);
+      // Only this key: the whole array would replace the chosen Zaver payment method stored on the payment.
       $payment->setAdditionalInformation(
-        [\Magento\Sales\Model\Order\Payment\Transaction::RAW_DETAILS => (array)$paymentData]
+        \Magento\Sales\Model\Order\Payment\Transaction::RAW_DETAILS, (array)$paymentData
       );
       $formatedPrice = $order->getBaseCurrency()->formatTxt(
         $paymentData["authorizeAmount"]
@@ -350,5 +351,26 @@ class Index extends \Zaver\Payment\Controller\AbstractCheckoutAction
     }
     catch (Exception $e) {
     }
+  }
+
+  /**
+   * Build a Zaver address from a Magento order address
+   *
+   * @param \Magento\Sales\Model\Order\Address $address
+   * @return \Zaver\SDK\Object\Address
+   */
+  private function createZaverAddress($address) {
+    $zaverAddress = \Zaver\SDK\Object\Address::create()
+      ->setName($address->getFirstname() . " " . $address->getLastname())
+      ->setAddressLine1((string)$address->getStreetLine(1))
+      ->setPostalCode((string)$address->getPostcode())
+      ->setCity((string)$address->getCity())
+      ->setCountry((string)$address->getCountryId());
+
+    if (!empty($address->getStreetLine(2))) {
+      $zaverAddress->setAddressLine2($address->getStreetLine(2));
+    }
+
+    return $zaverAddress;
   }
 }

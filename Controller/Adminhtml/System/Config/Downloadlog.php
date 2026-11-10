@@ -37,7 +37,7 @@ class Downloadlog extends Action
     \Psr\Log\LoggerInterface $logger
   ) {
     $this->_downloader = $fileFactory;
-    $this->directory = $directory;
+    $this->_directory = $directory;
     $this->_logger = $logger;
 
     parent::__construct($context);
@@ -45,7 +45,7 @@ class Downloadlog extends Action
 
   public function execute() {
     $fileName = "zaver.log";
-    $file = $this->directory->getPath("log") . "/zaver/" . $fileName;
+    $file = $this->_directory->getPath("log") . "/zaver/" . $fileName;
 
     /**
      * do file download

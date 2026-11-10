@@ -5,8 +5,6 @@ namespace Zaver\Payment\Model\Config;
 use Magento\Checkout\Model\ConfigProviderInterface;
 use Psr\Log\LoggerInterface;
 use Zaver\Payment\Model\Payment;
-use Zaver\SDK\Object\PaymentMethodsRequest;
-use Zaver\SDK\Checkout;
 
 class ConfigProvider implements ConfigProviderInterface
 {
@@ -38,6 +36,16 @@ class ConfigProvider implements ConfigProviderInterface
   private $logger;
 
   /**
+   * @var \Zaver\Payment\Model\PaymentMethods
+   */
+  private $paymentMethods;
+
+  /**
+   * @var \Magento\Framework\UrlInterface
+   */
+  private $urlBuilder;
+
+  /**
    * @var AbstractMethod[]
    */
   protected $aMethodInstances;
@@ -63,64 +71,40 @@ class ConfigProvider implements ConfigProviderInterface
     \Magento\Framework\Escaper $escaper,
     \Zaver\Payment\Helper\Data $zvDataHelper,
     \Magento\Checkout\Model\Session $checkoutSession,
-    \Psr\Log\LoggerInterface $logger
+    \Psr\Log\LoggerInterface $logger,
+    \Zaver\Payment\Model\PaymentMethods $paymentMethods,
+    \Magento\Framework\UrlInterface $urlBuilder
   ) {
     $this->escaper = $escaper;
     $this->paymentHelper = $paymentHelper;
     $this->zvDataHelper = $zvDataHelper;
     $this->checkoutSession = $checkoutSession;
     $this->logger = $logger;
+    $this->paymentMethods = $paymentMethods;
+    $this->urlBuilder = $urlBuilder;
   }
 
   /**
+   * The texts of the Zaver payment methods offered for the cart as it is when the checkout loads. The payment step
+   * reloads them from methodsUrl once the customer has entered an address, as the market follows its country.
+   *
    * {@inheritdoc}
    */
   public function getConfig() {
-    $strpaylaterTitle = 'Rechnung';
-    $strinstallmentsTitle = 'Ratenzahlung';
-    $strpaylaterLogoSrc = 'https://cdn.zaver.com/DE/paymentmethod/icon-pay-later.svg';
-    $strinstallmentsLogoSrc = 'https://cdn.zaver.com/DE/paymentmethod/icon-installments.svg';
+    $methods = [];
 
     try {
-      $zaverApiKey = $this->zvDataHelper->getZVApiKey();
-      $zaverTestMode = $this->zvDataHelper->getZVTestMode();
-      $languageCode = 'EUR';
-
-      $amount = $this->checkoutSession->getQuote()->getGrandTotal();
-
-      $oCheckout = new \Zaver\SDK\Checkout($zaverApiKey, $zaverTestMode);
-      $oPaymentReq = PaymentMethodsRequest::create()
-        ->setCurrency($languageCode)
-        ->setAmount($amount);
-
-      $oPaymentRes = $oCheckout->getPaymentMethods($oPaymentReq);
-
-      if (count($oPaymentRes["paymentMethods"]) > 0) {
-
-        foreach ($oPaymentRes["paymentMethods"] as $method) {
-          if ($method["paymentMethod"] == $this->zvDataHelper->getZaverPayLaterCode()) {
-            $strpaylaterLogoSrc = $method["iconSvgSrc"];
-            $strpaylaterTitle = $method["title"];
-          }
-          if ($method["paymentMethod"] == $this->zvDataHelper->getZaverInstallmentsCode()) {
-            $strinstallmentsLogoSrc = $method["iconSvgSrc"];
-            $strinstallmentsTitle = $method["title"];
-          }
-        }
-      }
+      $methods = $this->paymentMethods->getOffered($this->checkoutSession->getQuote());
     }
-    catch (Exception $e) {
+    catch (\Exception $e) {
+      $this->logger->warning('Zaver payment methods could not be loaded for the checkout', ['error' => $e->getMessage()]);
     }
 
     return [
       'payment' => [
         'zaver' => [
-          'paylaterTitle' => $strpaylaterTitle,
-          'installmentsTitle' => $strinstallmentsTitle,
-          'paylaterLogoSrc' => $strpaylaterLogoSrc,
-          'installmentsLogoSrc' => $strinstallmentsLogoSrc,
-          'paylaterDesc' => 'Spater bezahlen',
-          'installmentsDesc' => 'Zahlen Sie in Ihrem Tempo'
+          'methods' => $methods,
+          'methodsUrl' => $this->urlBuilder->getUrl('zaver/checkout/methods')
         ]
       ]
     ];

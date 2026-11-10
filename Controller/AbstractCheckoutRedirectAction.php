@@ -45,8 +45,32 @@ abstract class AbstractCheckoutRedirectAction extends \Zaver\Payment\Controller\
    */
   protected function executeSuccessAction() {
     if ($this->getCheckoutSession()->getLastRealOrderId()) {
+      $this->applyZaverStatus();
       $this->getMessageManager()->addSuccess(__("Your payment is complete"));
       $this->redirectToCheckoutOnePageSuccess();
+    }
+  }
+
+  /**
+   * Apply the Zaver payment status to the order like a callback would, in case the callback is late or cannot reach
+   * the shop. The order is the one of this checkout session, and its status is asked from Zaver, so the return URL
+   * cannot change orders by itself. Failures only get logged: the customer is sent to the success page regardless.
+   */
+  private function applyZaverStatus() {
+    $order = $this->getOrder();
+
+    if (!$order || !$order->getData('zaver_payment_id')) {
+      return;
+    }
+
+    try {
+      $statusUpdater = $this->getObjectManager()->get(\Zaver\Payment\Model\PaymentStatusUpdater::class);
+      $statusUpdater->apply($order, $statusUpdater->fetchStatus($order));
+    }
+    catch (\Exception $e) {
+      $this->getLogger()->warning('Zaver payment status not applied on return', [
+        'order' => $order->getIncrementId(), 'error' => $e->getMessage()
+      ]);
     }
   }
 

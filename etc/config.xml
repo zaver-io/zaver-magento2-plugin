@@ -3,6 +3,24 @@
         xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Store:etc/config.xsd">
     <default>
         <payment>
+            <zaver_checkout>
+                <active>0</active>
+                <model>Zaver\Payment\Model\Checkout</model>
+                <title>Zaver</title>
+                <order_status_pending>pending_payment</order_status_pending>
+                <allowspecific>0</allowspecific>
+                <can_order>1</can_order>
+                <can_initialize>1</can_initialize>
+                <can_use_checkout>1</can_use_checkout>
+                <can_refund>1</can_refund>
+                <can_void>1</can_void>
+                <can_edit>1</can_edit>
+                <can_capture>1</can_capture>
+                <can_authorize>1</can_authorize>
+                <can_use_internal>1</can_use_internal>
+                <group>zaver</group>
+            </zaver_checkout>
+            <!-- Payment methods of orders placed before 2.0.0; not offered in the checkout any more. -->
             <zaver_paylater>
                 <active>0</active>
                 <model>Zaver\Payment\Model\Paylater</model>

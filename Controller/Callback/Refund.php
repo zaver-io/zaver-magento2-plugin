@@ -23,23 +23,38 @@ class Refund extends \Zaver\Payment\Controller\AbstractCallbackAction implements
     }
 
     try {
-      $logger = $this->getLogger();
-
       $dataHelper = $this->getHelper();
-      $shipments = $this->getShipments();
       $orderId = $_GET['orderId'];
 
       $api = new \Zaver\SDK\Refund($dataHelper->getZVApiKey(), $dataHelper->getZVTestMode());
       $strCallBkToken = $dataHelper->getZVCallbackToken();
       $refundZv = $api->receiveCallback($strCallBkToken);
 
-      $strRefundStatus = $refundZv->getStatus();
-
       $order = $this->getOrderFactory()->create()->loadByIncrementId($orderId);
-      $strOrderStatus = $order->getStatus();
-      $strOrderState = $order->getState();
-      $successOrderState = \Magento\Sales\Model\Order::STATE_PROCESSING;
-      $failedOrderState = \Magento\Sales\Model\Order::STATE_CANCELED;
+      if (!$order->getId()) {
+        $this->getResponse()->setHttpResponseCode(404);
+        return;
+      }
+
+      // The credit memo exists since the refund was created; the callback tells how the refund ended at Zaver.
+      $refundId = $refundZv->getRefundId();
+      $amount = $order->getBaseCurrency()->formatTxt($refundZv->getRefundAmount());
+      switch ($refundZv->getStatus()) {
+        case \Zaver\SDK\Config\RefundStatus::EXECUTED:
+          $order->addCommentToStatusHistory((string)__('Zaver refund %1 of %2 was paid out.', $refundId, $amount));
+          $order->save();
+          break;
+
+        case \Zaver\SDK\Config\RefundStatus::CANCELLED:
+          $order->addCommentToStatusHistory((string)__('Zaver cancelled refund %1 of %2: the money was not paid back, although the credit memo exists.',
+            $refundId, $amount));
+          $order->save();
+          break;
+      }
+
+      $this->getLogger()->info('Zaver refund callback', [
+        'order' => $orderId, 'refundId' => $refundId, 'status' => $refundZv->getStatus()
+      ]);
 
       $this->getResponse()->setHttpResponseCode(200);
     }

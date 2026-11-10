@@ -2,7 +2,7 @@
   "name": "zaver/payment",
   "description": "Zaver Payment Module for Magento 2",
   "type": "magento2-module",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "license": "proprietary",
   "repositories": [
     {
@@ -18,7 +18,8 @@
   ],
   "require": {
     "php": ">=7.4.0",
-    "zaver/sdk": "dev-main"
+    "magento/framework": "^103.0.4",
+    "zaver/sdk": "^3.1"
   },
   "autoload": {
     "psr-4": {
